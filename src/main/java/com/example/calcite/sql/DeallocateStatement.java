@@ -16,7 +16,7 @@ import org.checkerframework.checker.nullness.qual.Nullable;
 /** DEALLOCATE statement. */
 public class DeallocateStatement extends SqlCall {
   private static final SqlOperator OPERATOR =
-      new SqlSpecialOperator("DEALLOCATE", SqlKind.OTHER) {
+      new SqlSpecialOperator("DEALLOCATE", SqlKind.OTHER_DDL) {
         /** SqlCall clone method calls createCall to make copy of node so we need override it*/
         @Override public SqlCall createCall(@Nullable SqlLiteral functionQualifier,
             SqlParserPos pos, @Nullable SqlNode... operands) {
