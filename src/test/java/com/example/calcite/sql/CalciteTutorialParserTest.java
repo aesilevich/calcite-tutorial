@@ -2,6 +2,7 @@ package com.example.calcite.sql;
 
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParserFixture;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.parser.SqlParserTest;
 import org.junit.jupiter.api.Test;
 
@@ -26,18 +27,21 @@ class CalciteTutorialParserTest extends SqlParserTest {
  */
   @Test void testDeallocate() {
     // parsing statement
-    SqlParserFixture fixture = sql("deallocate a");
+    SqlParserFixture fixture = sql("deallocate somefoo");
 
     // checking node type
     SqlNode node = fixture.node();
     assertThat(node, instanceOf(DeallocateStatement.class));
 
+    // checking node position
+    assertThat(node.getParserPosition(), is(new SqlParserPos(1, 1, 1, 18)));
+
     // checking identifier
     DeallocateStatement deallocate = (DeallocateStatement)node;
-    assertThat(deallocate.id.getSimple(), is("A"));
+    assertThat(deallocate.id.getSimple(), is("SOMEFOO"));
 
     // checking parsed SQL string
-    fixture.ok("DEALLOCATE `A`");
+    fixture.ok("DEALLOCATE `SOMEFOO`");
   }
 
 /**
@@ -50,6 +54,9 @@ class CalciteTutorialParserTest extends SqlParserTest {
     // checking node type
     SqlNode node = fixture.node();
     assertThat(node, instanceOf(DeallocateStatement.class));
+
+    // checking node position
+    assertThat(node.getParserPosition(), is(new SqlParserPos(1, 1, 1, 14)));
 
     // checking identifier (ALL has no identifier)
     DeallocateStatement deallocate = (DeallocateStatement) node;
@@ -64,19 +71,22 @@ class CalciteTutorialParserTest extends SqlParserTest {
  */
   @Test void testDeallocatePrepare() {
     // parsing statement
-    SqlParserFixture fixture = sql("deallocate prepare x");
+    SqlParserFixture fixture = sql("deallocate prepare somefoo");
 
     // checking node type
     SqlNode node = fixture.node();
     assertThat(node, instanceOf(DeallocateStatement.class));
 
+    // checking node position
+    assertThat(node.getParserPosition(), is(new SqlParserPos(1, 1, 1, 26)));
+
     // checking identifier
     DeallocateStatement deallocate = (DeallocateStatement) node;
-    assertThat(deallocate.id.getSimple(), is("X"));
+    assertThat(deallocate.id.getSimple(), is("SOMEFOO"));
     assertThat(deallocate.prepare, is(true));
 
     // checking parsed SQL string
-    fixture.ok("DEALLOCATE PREPARE `X`");
+    fixture.ok("DEALLOCATE PREPARE `SOMEFOO`");
   }
 
 /**
@@ -89,6 +99,9 @@ class CalciteTutorialParserTest extends SqlParserTest {
     // checking node type
     SqlNode node = fixture.node();
     assertThat(node, instanceOf(DeallocateStatement.class));
+
+    // checking node position
+    assertThat(node.getParserPosition(), is(new SqlParserPos(1, 1, 1, 22)));
 
     // checking identifier (ALL has no identifier)
     DeallocateStatement deallocate = (DeallocateStatement) node;

@@ -19,21 +19,22 @@
 // Parses DEALLOCATE statement
 SqlNode SqlDeallocate() :
 {
+  final Span s;
   final SqlIdentifier id;
   boolean prepare = false;
 }
 {
-  <DEALLOCATE>
+  <DEALLOCATE> { s = span(); }
 
   [ <PREPARE> { prepare = true; } ]
 
   (
     <ALL> {
-      return DeallocateStatements.deallocateAll(getPos(), prepare);
+      return DeallocateStatements.deallocateAll(s.end(this), prepare);
     }
   |
     id = SimpleIdentifier() {
-      return DeallocateStatements.deallocate(getPos(), prepare, id);
+      return DeallocateStatements.deallocate(s.end(this), prepare, id);
     }
   )
 }
