@@ -53,14 +53,19 @@ public class CalciteTutorialDatabase {
 
   /* Initializes all parts of database for processing queries */
   public CalciteTutorialDatabase() throws JsonProcessingException {
+    this(new JsonSchema());
+  }
+
+  /* Initializes all parts of database for processing queries with specified schema */
+  public CalciteTutorialDatabase(JsonSchema jsonSchema) {
     // creating type factory
     typeFactory = new JavaTypeFactoryImpl();
 
     // creating root schema
     rootSchema = CalciteSchema.createRootSchema(false, false);
 
-    // adding default JSON schema
-    jsonSchema = new JsonSchema();
+    // adding JSON schema
+    this.jsonSchema = jsonSchema;
     rootSchema.add(schemaName, jsonSchema);
 
     // creating catalog reader
