@@ -14,6 +14,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <calcite.version>1.42.0</calcite.version>
     <junit.version>5.10.5</junit.version>
+    <jackson.version>2.18.6</jackson.version>
   </properties>
 
   <dependencies>
@@ -21,6 +22,16 @@
       <groupId>org.apache.calcite</groupId>
       <artifactId>calcite-core</artifactId>
       <version>${calcite.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <version>42.7.4</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
     </dependency>
 
     <dependency>
