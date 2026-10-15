@@ -16,6 +16,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Tests for CalciteTutorialDatabase. */
 class CalciteTutorialDatabaseTest {
@@ -46,5 +47,13 @@ class CalciteTutorialDatabaseTest {
     assertThat(RelOptUtil.toString(root.rel),
         is("LogicalProject(id=[$0], name=[$1], dep_id=[$2])\n"
             + "  LogicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests correct error reporting for unsupported ROLLUP operation */
+  @Test void testRollup() {
+    UnsupportedOperationException e = assertThrows(UnsupportedOperationException.class,
+        () -> database.processQuery("select dep_id from users group by rollup(dep_id)"));
+
+    assertThat(e.getMessage(), is("ROLLUP is not supported in this engine"));
   }
 }

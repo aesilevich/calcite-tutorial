@@ -2,6 +2,7 @@ package com.example.calcite;
 
 import com.example.calcite.parser.impl.SqlParserImpl;
 import com.example.calcite.schema.JsonSchema;
+import com.example.calcite.sql.UnsupportedOperationValidator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.Collections;
@@ -97,6 +98,9 @@ public class CalciteTutorialDatabase {
 
     // validating query
     SqlNode validatedNode = validator.validate(node);
+
+    // checking for unsupported operations
+    validatedNode.accept(new UnsupportedOperationValidator());
 
     // converting query to relational tree
     return converter.convertQuery(validatedNode, false, true);
