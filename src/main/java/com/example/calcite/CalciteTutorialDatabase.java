@@ -14,6 +14,7 @@ import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
@@ -99,7 +100,13 @@ public class CalciteTutorialDatabase {
     SqlNode validatedNode = validator.validate(node);
 
     // converting query to relational tree
-    return converter.convertQuery(validatedNode, false, true);
+    RelRoot root = converter.convertQuery(validatedNode, false, true);
+    RelNode rel = root.rel;
+
+    // trimming unused fields
+    rel = converter.trimUnusedFields(true, root.rel);
+
+    return root.withRel(rel);
   }
 
   /* Creates query planner */
