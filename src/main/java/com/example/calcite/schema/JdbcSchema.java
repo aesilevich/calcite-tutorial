@@ -5,6 +5,7 @@ import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -89,6 +90,20 @@ public class JdbcSchema extends AbstractSchema {
       }
     }
 
-    return new SchemaTable(columns);
+    return new SchemaTable(columns, getRowCount(connection, schemaName, tableName));
+  }
+
+  /** Calculates and returns number of rows in table using COUNT(*) query. */
+  private static double getRowCount(Connection connection, String schemaName,
+      String tableName) throws SQLException {
+    try (Statement statement = connection.createStatement()) {
+      String sql = "select count(*) from " + statement.enquoteIdentifier(schemaName, true)
+          + "." + statement.enquoteIdentifier(tableName, true);
+
+      try (ResultSet resultSet = statement.executeQuery(sql)) {
+        resultSet.next();
+        return resultSet.getLong(1);
+      }
+    }
   }
 }

@@ -4,17 +4,29 @@ import java.util.List;
 
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.schema.Statistic;
+import org.apache.calcite.schema.Statistics;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Custom table schema */
 public class SchemaTable extends AbstractTable {
   /** List of table columns */
   private final List<Column> columns;
 
-  /** Creates table schema from list of columns */
-  public SchemaTable(List<Column> columns) {
+  /** Number of rows in table or null if unknown */
+  private final @Nullable Double rowCount;
+
+  /** Creates table schema from list of columns and number of rows */
+  public SchemaTable(List<Column> columns, @Nullable Double rowCount) {
     this.columns = columns;
+    this.rowCount = rowCount;
+  }
+
+  /** Returns table statistics */
+  @Override public Statistic getStatistic() {
+    return rowCount == null ? Statistics.UNKNOWN : Statistics.of(rowCount, null);
   }
 
   /** Returns type of row for table */

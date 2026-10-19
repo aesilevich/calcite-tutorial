@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Tests for JsonSchema. */
@@ -160,6 +161,52 @@ class JsonSchemaTest {
             """));
 
     assertThat(e.getMessage(), is("Field 'nullable' in column 't.c' is not a boolean"));
+  }
+
+  /** Tests parsing row count for table. */
+  @Test void testRowCount() throws Exception {
+    JsonSchema schema = new JsonSchema("""
+        {"tables": [{"name": "t", "rowCount": 100, "columns": [
+          {"name": "c", "type": "integer"}
+        ]}]}
+        """);
+
+    assertThat(schema.getSchemaTable("t").getStatistic().getRowCount(), is(100.0));
+  }
+
+  /** Tests that row count is unknown if it's not specified. */
+  @Test void testRowCountUnknown() throws Exception {
+    JsonSchema schema = new JsonSchema("""
+        {"tables": [{"name": "t", "columns": [
+          {"name": "c", "type": "integer"}
+        ]}]}
+        """);
+
+    assertThat(schema.getSchemaTable("t").getStatistic().getRowCount(), nullValue());
+  }
+
+  /** Tests parsing error with row count that is not a number. */
+  @Test void testRowCountNotNumber() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new JsonSchema("""
+            {"tables": [{"name": "t", "rowCount": "many", "columns": [
+              {"name": "c", "type": "integer"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Field 'rowCount' in table 't' is not a non-negative number"));
+  }
+
+  /** Tests parsing error with negative row count. */
+  @Test void testRowCountNegative() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new JsonSchema("""
+            {"tables": [{"name": "t", "rowCount": -1, "columns": [
+              {"name": "c", "type": "integer"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Field 'rowCount' in table 't' is not a non-negative number"));
   }
 
   /** Tests tables in default schema. */

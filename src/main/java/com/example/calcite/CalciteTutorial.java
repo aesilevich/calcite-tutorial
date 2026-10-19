@@ -7,7 +7,7 @@ import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.lookup.LikePattern;
-import com.example.calcite.schema.JsonSchema;
+import com.example.calcite.schema.JdbcSchema;
 
 import static java.util.Objects.requireNonNull;
 
@@ -15,7 +15,7 @@ import static java.util.Objects.requireNonNull;
 public class CalciteTutorial {
   public static void main(String[] args) throws Exception {
     // loading JDBC database schema
-    JsonSchema jdbcSchema = new JsonSchema();
+    JdbcSchema jdbcSchema = new JdbcSchema();
 
     // creating type factory
     RelDataTypeFactory typeFactory = new JavaTypeFactoryImpl();
@@ -23,7 +23,7 @@ public class CalciteTutorial {
     // dumping schema to stdout
     for (String tableName : jdbcSchema.tables().getNames(LikePattern.any())) {
       Table table = requireNonNull(jdbcSchema.tables().get(tableName));
-      System.out.println(tableName);
+      System.out.println(tableName + " (" + table.getStatistic().getRowCount() + " rows)");
       for (RelDataTypeField field : table.getRowType(typeFactory).getFieldList()) {
         System.out.println("  " + field.getName() + " " + field.getType().getFullTypeString());
       }

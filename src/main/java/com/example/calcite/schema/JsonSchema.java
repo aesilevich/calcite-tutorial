@@ -27,6 +27,7 @@ public class JsonSchema extends AbstractSchema {
         "tables": [
           {
             "name": "users",
+            "rowCount": 10000,
             "columns": [
               {"name": "id", "type": "integer", "nullable": false},
               {"name": "name", "type": "varchar", "nullable": false},
@@ -35,6 +36,7 @@ public class JsonSchema extends AbstractSchema {
           },
           {
             "name": "departments",
+            "rowCount": 1000,
             "columns": [
               {"name": "id", "type": "integer", "nullable": false},
               {"name": "name", "type": "varchar", "nullable": false}
@@ -66,6 +68,17 @@ public class JsonSchema extends AbstractSchema {
       }
 
       String tableName = getFieldText(tableNode, "name", "table");
+
+      // reading optional number of rows
+      Double rowCount = null;
+      JsonNode rowCountNode = tableNode.get("rowCount");
+      if (rowCountNode != null) {
+        if (!rowCountNode.isNumber() || rowCountNode.doubleValue() < 0) {
+          throw new IllegalArgumentException("Field 'rowCount' in table '" + tableName
+              + "' is not a non-negative number");
+        }
+        rowCount = rowCountNode.doubleValue();
+      }
 
       List<SchemaTable.Column> columns = new ArrayList<>();
       for (JsonNode columnNode : getFieldArray(tableNode, "columns", "table '" + tableName + "'")) {
@@ -101,7 +114,7 @@ public class JsonSchema extends AbstractSchema {
         columns.add(new SchemaTable.Column(columnName, type, isNullable));
       }
 
-      tables.put(tableName, new SchemaTable(columns));
+      tables.put(tableName, new SchemaTable(columns, rowCount));
     }
   }
 
