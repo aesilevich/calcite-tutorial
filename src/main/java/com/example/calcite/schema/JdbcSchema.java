@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.rel.type.RelProtoDataType;
 import org.apache.calcite.schema.Function;
 import org.apache.calcite.schema.Schema;
@@ -86,7 +87,52 @@ public class JdbcSchema extends AbstractSchema {
 
         boolean isNullable = columnsSet.getInt("NULLABLE") != DatabaseMetaData.columnNoNulls;
 
-        columns.add(new SchemaTable.Column(name, type, isNullable));
+        // reading column size (precision/length)
+        Integer columnSize = columnsSet.getInt("COLUMN_SIZE");
+        if (columnsSet.wasNull()) {
+          columnSize = null;
+        }
+
+        // reading decimal digits (scale)
+        Integer decimalDigits = columnsSet.getInt("DECIMAL_DIGITS");
+        if (columnsSet.wasNull()) {
+          decimalDigits = null;
+        }
+
+        // converting column size and decimal digits to precision and scale
+        Integer precision = null;
+        Integer scale = null;
+        switch (type) {
+        case DECIMAL:
+          // column size is 0 for NUMERIC without precision
+          if (columnSize != null && columnSize > 0) {
+            precision = columnSize;
+            scale = decimalDigits;
+          }
+          break;
+
+        case CHAR:
+        case VARCHAR:
+        case BINARY:
+        case VARBINARY:
+          // set precision only for values <= getMaxPrecision
+          if (columnSize != null && columnSize > 0
+              && columnSize <= RelDataTypeSystem.DEFAULT.getMaxPrecision(type)) {
+            precision = columnSize;
+          }
+          break;
+
+        case TIME:
+        case TIMESTAMP:
+          // column size is display width
+          precision = decimalDigits;
+          break;
+
+        default:
+          break;
+        }
+
+        columns.add(new SchemaTable.Column(name, type, isNullable, precision, scale));
       }
     }
 

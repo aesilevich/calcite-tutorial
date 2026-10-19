@@ -209,6 +209,83 @@ class JsonSchemaTest {
     assertThat(e.getMessage(), is("Field 'rowCount' in table 't' is not a non-negative number"));
   }
 
+  /** Tests parsing precision, length and scale for columns. */
+  @Test void testPrecisionAndScale() throws Exception {
+    JsonSchema schema = new JsonSchema("""
+        {"tables": [{"name": "t", "columns": [
+          {"name": "d", "type": "decimal", "precision": 10, "scale": 2},
+          {"name": "s", "type": "varchar", "length": 100},
+          {"name": "p", "type": "varchar", "precision": 50}
+        ]}]}
+        """);
+
+    assertThat(schema.getSchemaTable("t").getRowType(typeFactory).getFullTypeString(),
+        is("RecordType(DECIMAL(10, 2) d, VARCHAR(100) s, VARCHAR(50) p) NOT NULL"));
+  }
+
+  /** Tests parsing error with precision that is not an integer. */
+  @Test void testPrecisionNotInteger() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new JsonSchema("""
+            {"tables": [{"name": "t", "columns": [
+              {"name": "c", "type": "varchar", "precision": "10"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(),
+        is("Field 'precision' in column 't.c' is not a non-negative integer"));
+  }
+
+  /** Tests parsing error with both precision and length specified. */
+  @Test void testPrecisionAndLength() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new JsonSchema("""
+            {"tables": [{"name": "t", "columns": [
+              {"name": "c", "type": "varchar", "precision": 10, "length": 10}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(),
+        is("Both 'precision' and 'length' are specified for column 't.c'"));
+  }
+
+  /** Tests parsing error with precision for type that does not support it. */
+  @Test void testPrecisionNotSupported() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new JsonSchema("""
+            {"tables": [{"name": "t", "columns": [
+              {"name": "c", "type": "integer", "precision": 5}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(),
+        is("Type INTEGER of column 't.c' does not support precision"));
+  }
+
+  /** Tests parsing error with scale for type that does not support it. */
+  @Test void testScaleNotSupported() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new JsonSchema("""
+            {"tables": [{"name": "t", "columns": [
+              {"name": "c", "type": "varchar", "length": 10, "scale": 2}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Type VARCHAR of column 't.c' does not support scale"));
+  }
+
+  /** Tests parsing error with scale specified without precision. */
+  @Test void testScaleWithoutPrecision() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> new JsonSchema("""
+            {"tables": [{"name": "t", "columns": [
+              {"name": "c", "type": "decimal", "scale": 2}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Scale is specified without precision for column 't.c'"));
+  }
+
   /** Tests tables in default schema. */
   @Test void testDefaultSchema() throws Exception {
     JsonSchema schema = new JsonSchema();

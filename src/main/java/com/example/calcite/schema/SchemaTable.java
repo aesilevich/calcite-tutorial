@@ -33,7 +33,14 @@ public class SchemaTable extends AbstractTable {
   @Override public RelDataType getRowType(RelDataTypeFactory typeFactory) {
     RelDataTypeFactory.Builder builder = typeFactory.builder();
     for (Column column : columns) {
-      builder.add(column.name, column.type).nullable(column.isNullable);
+      if (column.precision == null) {
+        builder.add(column.name, column.type);
+      } else if (column.scale == null) {
+        builder.add(column.name, column.type, column.precision);
+      } else {
+        builder.add(column.name, column.type, column.precision, column.scale);
+      }
+      builder.nullable(column.isNullable);
     }
 
     return builder.build();
@@ -45,10 +52,23 @@ public class SchemaTable extends AbstractTable {
     public final SqlTypeName type;
     public final boolean isNullable;
 
+    /** Precision (or length for string types) or null if not specified */
+    public final @Nullable Integer precision;
+
+    /** Scale or null if not specified */
+    public final @Nullable Integer scale;
+
     public Column(String name, SqlTypeName type, boolean isNullable) {
+      this(name, type, isNullable, null, null);
+    }
+
+    public Column(String name, SqlTypeName type, boolean isNullable,
+        @Nullable Integer precision, @Nullable Integer scale) {
       this.name = name;
       this.type = type;
       this.isNullable = isNullable;
+      this.precision = precision;
+      this.scale = scale;
     }
   }
 }

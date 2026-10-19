@@ -12,6 +12,7 @@ import org.apache.calcite.schema.Schema;
 import org.apache.calcite.schema.Table;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -110,8 +111,44 @@ public class JsonSchema extends AbstractSchema {
               + tableName + "." + columnName + "'");
         }
 
+        // reading precision (or length) and scale
+        String columnDescription = "column '" + tableName + "." + columnName + "'";
+        Integer precision =
+            getFieldNonNegativeInteger(columnNode, "precision", columnDescription);
+        Integer length = getFieldNonNegativeInteger(columnNode, "length", columnDescription);
+        Integer scale = getFieldNonNegativeInteger(columnNode, "scale", columnDescription);
+
+        // checkint that only precision or length is specified
+        if (precision != null && length != null) {
+          throw new IllegalArgumentException("Both 'precision' and 'length' are specified for "
+              + columnDescription);
+        }
+        if (length != null) {
+          precision = length;
+        }
+
+        // checking that Calcite type supports precision without scale
+        if (precision != null && !type.allowsPrecNoScale()) {
+          throw new IllegalArgumentException("Type " + type + " of " + columnDescription
+              + " does not support precision");
+        }
+
+        if (scale != null) {
+          // checking that Calcite type supports scale
+          if (!type.allowsPrecScale(true, true)) {
+            throw new IllegalArgumentException("Type " + type + " of " + columnDescription
+                + " does not support scale");
+          }
+
+          // checking that precision/length is specified
+          if (precision == null) {
+            throw new IllegalArgumentException("Scale is specified without precision for "
+                + columnDescription);
+          }
+        }
+
         // adding column to list of columns
-        columns.add(new SchemaTable.Column(columnName, type, isNullable));
+        columns.add(new SchemaTable.Column(columnName, type, isNullable, precision, scale));
       }
 
       tables.put(tableName, new SchemaTable(columns, rowCount));
@@ -144,6 +181,25 @@ public class JsonSchema extends AbstractSchema {
     }
 
     return value.textValue();
+  }
+
+  /**
+   * Returns integer value for specified optional field, or null if field is not found.
+   * Throws exception if field is not a non-negative integer.
+   */
+  private static @Nullable Integer getFieldNonNegativeInteger(JsonNode node, String field,
+      String description) {
+    JsonNode value = node.get(field);
+    if (value == null) {
+      return null;
+    }
+
+    if (!value.isInt() || value.intValue() < 0) {
+      throw new IllegalArgumentException("Field '" + field + "' in " + description
+          + " is not a non-negative integer");
+    }
+
+    return value.intValue();
   }
 
   /**
