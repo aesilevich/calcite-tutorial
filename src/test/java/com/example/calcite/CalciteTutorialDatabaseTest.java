@@ -47,4 +47,33 @@ class CalciteTutorialDatabaseTest {
         is("LogicalProject(id=[$0], name=[$1], dep_id=[$2])\n"
             + "  LogicalTableScan(table=[[tutorial, users]])\n"));
   }
+
+  /** Tests removing of correlated subquery in WHERE */
+  @Test void testFilterSubQuery() throws Exception {
+    RelRoot root = database.processQuery("select name from departments d\n"
+        + "where exists (select 1 from users u where u.dep_id = d.id)");
+
+    assertThat(SubQueryChecker.containsSubQuery(root.rel), is(false));
+    assertThat(CorrelateChecker.containsCorrelate(root.rel), is(false));
+  }
+
+  /** Tests removing of correlated subquery in SELECT */
+  @Test void testProjectSubQuery() throws Exception {
+    RelRoot root = database.processQuery(
+        "select d.name, (select count(*) from users u where u.dep_id = d.id)\n"
+            + "from departments d");
+
+    assertThat(SubQueryChecker.containsSubQuery(root.rel), is(false));
+    assertThat(CorrelateChecker.containsCorrelate(root.rel), is(false));
+  }
+
+  /** Tests removing of correlated subquery in JOIN condition */
+  @Test void testJoinSubQuery() throws Exception {
+    RelRoot root = database.processQuery("select u.name from users u\n"
+        + "join departments d on u.dep_id = d.id\n"
+        + "and exists (select 1 from users u2 where u2.dep_id = d.id)");
+
+    assertThat(SubQueryChecker.containsSubQuery(root.rel), is(false));
+    assertThat(CorrelateChecker.containsCorrelate(root.rel), is(false));
+  }
 }

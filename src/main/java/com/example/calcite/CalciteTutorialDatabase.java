@@ -12,9 +12,14 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.hep.HepPlanner;
+import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.core.RelFactories;
+import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.impl.AbstractSchema;
@@ -25,8 +30,10 @@ import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
+import org.apache.calcite.sql2rel.RelDecorrelator;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
+import org.apache.calcite.tools.RelBuilder;
 
 /**
  * Main database class for tutorial. Incapsulates initialization of parser, validator
@@ -99,7 +106,23 @@ public class CalciteTutorialDatabase {
     SqlNode validatedNode = validator.validate(node);
 
     // converting query to relational tree
-    return converter.convertQuery(validatedNode, false, true);
+    RelRoot root = converter.convertQuery(validatedNode, false, true);
+
+    // rewriting subqueries into correlates
+    HepProgram program = HepProgram.builder()
+        .addRuleInstance(CoreRules.FILTER_SUB_QUERY_TO_CORRELATE)
+        .addRuleInstance(CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE)
+        .addRuleInstance(CoreRules.JOIN_SUB_QUERY_TO_CORRELATE)
+        .build();
+    HepPlanner hepPlanner = new HepPlanner(program);
+    hepPlanner.setRoot(root.rel);
+    RelNode rel = hepPlanner.findBestExp();
+
+    // decorrelating query
+    RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);
+    rel = RelDecorrelator.decorrelateQuery(rel, relBuilder);
+
+    return root.withRel(rel);
   }
 
   /* Creates query planner */
