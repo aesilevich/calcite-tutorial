@@ -6,22 +6,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import org.apache.calcite.rel.type.RelProtoDataType;
-import org.apache.calcite.schema.Function;
-import org.apache.calcite.schema.Schema;
-import org.apache.calcite.schema.Table;
-import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.ImmutableMultimap;
-import com.google.common.collect.Multimap;
 
-/** Cusom Calcite schema represented as JSON. */
-public class JsonSchema extends AbstractSchema {
+/** Helper class for Parsing Calcite schemas from JSON. */
+public class JsonSchema {
   /** Default database schema. */
   private static final String DEFAULT_SCHEMA_JSON = """
       {
@@ -47,22 +40,21 @@ public class JsonSchema extends AbstractSchema {
       }
       """;
 
-  /** Map of tables in schema. */
-  private final Map<String, Table> tables;
+  private JsonSchema() {}
 
   /** Creates default schema. */
-  public JsonSchema() throws JsonProcessingException {
-    this(DEFAULT_SCHEMA_JSON);
+  public static Schema createDefault() throws JsonProcessingException {
+    return parse(DEFAULT_SCHEMA_JSON);
   }
 
   /** Parses JSON string and creates schema from it */
-  public JsonSchema(String schemaJson) throws JsonProcessingException {
+  public static Schema parse(String schemaJson) throws JsonProcessingException {
     JsonNode root = new ObjectMapper().readTree(schemaJson);
     if (!root.isObject()) {
       throw new IllegalArgumentException("Schema is not an object");
     }
 
-    tables = new HashMap<>();
+    Map<String, SchemaTable> tables = new HashMap<>();
     for (JsonNode tableNode : getFieldArray(root, "tables", "schema")) {
       if (!tableNode.isObject()) {
         throw new IllegalArgumentException("Table is not an object");
@@ -153,16 +145,8 @@ public class JsonSchema extends AbstractSchema {
 
       tables.put(tableName, new SchemaTable(columns, rowCount));
     }
-  }
 
-  /** Returns table with specified name */
-  public SchemaTable getSchemaTable(String name) {
-    SchemaTable table = (SchemaTable) tables.get(name);
-    if (table == null) {
-      throw new IllegalArgumentException("Table '" + name + "' not found");
-    }
-
-    return table;
+    return new Schema(tables);
   }
 
   /**
@@ -218,21 +202,5 @@ public class JsonSchema extends AbstractSchema {
     }
 
     return value;
-  }
-
-  @Override protected Map<String, Table> getTableMap() {
-    return tables;
-  }
-
-  @Override protected Map<String, RelProtoDataType> getTypeMap() {
-    return Map.of();
-  }
-
-  @Override protected Multimap<String, Function> getFunctionMultimap() {
-    return ImmutableMultimap.of();
-  }
-
-  @Override protected Map<String, Schema> getSubSchemaMap() {
-    return Map.of();
   }
 }

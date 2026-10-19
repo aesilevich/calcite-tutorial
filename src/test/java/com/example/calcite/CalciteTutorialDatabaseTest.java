@@ -9,6 +9,7 @@ import org.apache.calcite.rel.logical.LogicalTableScan;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.example.calcite.schema.Schema;
 import com.example.calcite.schema.SchemaTable;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -39,7 +40,7 @@ class CalciteTutorialDatabaseTest {
     // checking that target table is users
     RelOptTable table = scan.getTable();
     assertThat(table.unwrap(SchemaTable.class),
-        sameInstance(database.getJsonSchema().getSchemaTable("users")));
+        sameInstance(((Schema) database.getSchema()).getSchemaTable("users")));
 
     // checking relation tree dump
     assertThat(RelOptUtil.toString(root.rel),

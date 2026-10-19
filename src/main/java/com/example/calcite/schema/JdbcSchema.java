@@ -2,7 +2,6 @@ package com.example.calcite.schema;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -12,72 +11,56 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.calcite.rel.type.RelDataTypeSystem;
-import org.apache.calcite.rel.type.RelProtoDataType;
-import org.apache.calcite.schema.Function;
-import org.apache.calcite.schema.Schema;
-import org.apache.calcite.schema.Table;
-import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.type.SqlTypeName;
 
-import com.google.common.collect.ImmutableMultimap;
-import com.google.common.collect.Multimap;
+/** Helper class for reading schemas catalog from JDBC database. */
+public class JdbcSchema {
+  private JdbcSchema() {}
 
-/** Custom schema for Calcite tutorial. */
-public class JdbcSchema extends AbstractSchema {
-  /** Map of tables in schema. */
-  private final Map<String, Table> tables;
+  /** Reads all schemas from database using specified JDBC connection. */
+  public static SchemaCatalog readCatalog(Connection connection) throws SQLException {
+    Map<String, Schema> schemas = new HashMap<>();
 
-  /**
-   * Creates new Calcite schema. Reads connection string from jdbc.url property,
-   * connects to database and reads list of tables.
-   */
-  public JdbcSchema() throws SQLException {
-    String jdbcUrl = System.getProperty("jdbc.url");
-    if (jdbcUrl == null) {
-      throw new IllegalStateException("System property jdbc.url is not set");
+    try (ResultSet schemasSet = connection.getMetaData().getSchemas()) {
+      while (schemasSet.next()) {
+        String name = schemasSet.getString("TABLE_SCHEM");
+        schemas.put(name, readSchema(connection, name));
+      }
     }
 
-    tables = new HashMap<>();
+    return new SchemaCatalog(schemas);
+  }
+
+  /** Reads tables of database schema with specified name. */
+  private static Schema readSchema(Connection connection, String schemaName)
+      throws SQLException {
+    Map<String, SchemaTable> tables = new HashMap<>();
 
     String[] types = {"TABLE"};
-    try (Connection con = DriverManager.getConnection(jdbcUrl);
-         ResultSet tablesSet = con.getMetaData().getTables(null, null, null, types)) {
+    try (ResultSet tablesSet = connection.getMetaData().getTables(null,
+        escapeName(connection.getMetaData(), schemaName), null, types)) {
 
       while (tablesSet.next()) {
-        // getting table and schema name
-        String schemaName = tablesSet.getString("TABLE_SCHEM");
+        // getting table name
         String name = tablesSet.getString("TABLE_NAME");
 
         // converting table
-        tables.put(name, convertTable(con, schemaName, name));
+        tables.put(name, convertTable(connection, schemaName, name));
       }
     }
-  }
 
-  @Override protected Map<String, Table> getTableMap() {
-    return tables;
-  }
-
-  @Override protected Map<String, RelProtoDataType> getTypeMap() {
-    return Map.of();
-  }
-
-  @Override protected Multimap<String, Function> getFunctionMultimap() {
-    return ImmutableMultimap.of();
-  }
-
-  @Override protected Map<String, Schema> getSubSchemaMap() {
-    return Map.of();
+    return new Schema(tables);
   }
 
   /** Reads metadata of single JDBC table and converts it to Table. */
-  private static Table convertTable(Connection connection, String schemaName,
+  private static SchemaTable convertTable(Connection connection, String schemaName,
       String tableName) throws SQLException {
 
     List<SchemaTable.Column> columns = new ArrayList<>();
 
-    try (ResultSet columnsSet =
-             connection.getMetaData().getColumns(null, schemaName, tableName, null)) {
+    DatabaseMetaData metaData = connection.getMetaData();
+    try (ResultSet columnsSet = metaData.getColumns(null, escapeName(metaData, schemaName),
+        escapeName(metaData, tableName), null)) {
       while (columnsSet.next()) {
         String name = columnsSet.getString("COLUMN_NAME");
         SqlTypeName type = SqlTypeName.getNameForJdbcType(columnsSet.getInt("DATA_TYPE"));
@@ -137,6 +120,15 @@ public class JdbcSchema extends AbstractSchema {
     }
 
     return new SchemaTable(columns, getRowCount(connection, schemaName, tableName));
+  }
+
+  /** Escapes '_' and '%' characters in name. */
+  private static String escapeName(DatabaseMetaData metaData, String name)
+      throws SQLException {
+    String escape = metaData.getSearchStringEscape();
+    return name.replace(escape, escape + escape)
+        .replace("_", escape + "_")
+        .replace("%", escape + "%");
   }
 
   /** Calculates and returns number of rows in table using COUNT(*) query. */

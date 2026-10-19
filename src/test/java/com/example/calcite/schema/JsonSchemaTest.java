@@ -17,7 +17,7 @@ class JsonSchemaTest {
 
   /** Tests parsing schema from JSON string. */
   @Test void testParseSchema() throws Exception {
-    JsonSchema schema = new JsonSchema("""
+    Schema schema = JsonSchema.parse("""
         {
           "tables": [
             {
@@ -38,7 +38,7 @@ class JsonSchemaTest {
   /** Tests parsing error with unknown type. */
   @Test void testUnknownType() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [{"name": "c", "type": "foo"}]}]}
             """));
 
@@ -48,7 +48,7 @@ class JsonSchemaTest {
   /** Tests parsing error with missing table name. */
   @Test void testMissingTableName() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"columns": [{"name": "c", "type": "integer"}]}]}
             """));
 
@@ -58,7 +58,7 @@ class JsonSchemaTest {
   /** Tests parsing error with missing column name. */
   @Test void testMissingColumnName() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [{"type": "integer"}]}]}
             """));
 
@@ -68,7 +68,7 @@ class JsonSchemaTest {
   /** Tests parsing error with missing column type. */
   @Test void testMissingColumnType() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [{"name": "c"}]}]}
             """));
 
@@ -78,7 +78,7 @@ class JsonSchemaTest {
   /** Tests parsing error with non-string column type. */
   @Test void testColumnTypeNotString() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [{"name": "c", "type": 5}]}]}
             """));
 
@@ -88,7 +88,7 @@ class JsonSchemaTest {
   /** Tests parsing error with schema that is not an object. */
   @Test void testSchemaNotObject() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("[]"));
+        () -> JsonSchema.parse("[]"));
 
     assertThat(e.getMessage(), is("Schema is not an object"));
   }
@@ -96,7 +96,7 @@ class JsonSchemaTest {
   /** Tests parsing error with missing tables. */
   @Test void testMissingTables() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("{}"));
+        () -> JsonSchema.parse("{}"));
 
     assertThat(e.getMessage(), is("Can't find field 'tables' in schema"));
   }
@@ -104,7 +104,7 @@ class JsonSchemaTest {
   /** Tests parsing error with tables that are not an array. */
   @Test void testTablesNotArray() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": {}}
             """));
 
@@ -114,7 +114,7 @@ class JsonSchemaTest {
   /** Tests parsing error with missing columns. */
   @Test void testMissingColumns() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t"}]}
             """));
 
@@ -124,7 +124,7 @@ class JsonSchemaTest {
   /** Tests parsing error with columns that are not an array. */
   @Test void testColumnsNotArray() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": "c"}]}
             """));
 
@@ -134,7 +134,7 @@ class JsonSchemaTest {
   /** Tests parsing error with table that is not an object. */
   @Test void testTableNotObject() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [5]}
             """));
 
@@ -144,7 +144,7 @@ class JsonSchemaTest {
   /** Tests parsing error with column that is not an object. */
   @Test void testColumnNotObject() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": ["c"]}]}
             """));
 
@@ -154,7 +154,7 @@ class JsonSchemaTest {
   /** Tests parsing error with nullable flag that is not a boolean. */
   @Test void testNullableNotBoolean() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [
               {"name": "c", "type": "integer", "nullable": "no"}
             ]}]}
@@ -165,7 +165,7 @@ class JsonSchemaTest {
 
   /** Tests parsing row count for table. */
   @Test void testRowCount() throws Exception {
-    JsonSchema schema = new JsonSchema("""
+    Schema schema = JsonSchema.parse("""
         {"tables": [{"name": "t", "rowCount": 100, "columns": [
           {"name": "c", "type": "integer"}
         ]}]}
@@ -176,7 +176,7 @@ class JsonSchemaTest {
 
   /** Tests that row count is unknown if it's not specified. */
   @Test void testRowCountUnknown() throws Exception {
-    JsonSchema schema = new JsonSchema("""
+    Schema schema = JsonSchema.parse("""
         {"tables": [{"name": "t", "columns": [
           {"name": "c", "type": "integer"}
         ]}]}
@@ -188,7 +188,7 @@ class JsonSchemaTest {
   /** Tests parsing error with row count that is not a number. */
   @Test void testRowCountNotNumber() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "rowCount": "many", "columns": [
               {"name": "c", "type": "integer"}
             ]}]}
@@ -200,7 +200,7 @@ class JsonSchemaTest {
   /** Tests parsing error with negative row count. */
   @Test void testRowCountNegative() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "rowCount": -1, "columns": [
               {"name": "c", "type": "integer"}
             ]}]}
@@ -211,7 +211,7 @@ class JsonSchemaTest {
 
   /** Tests parsing precision, length and scale for columns. */
   @Test void testPrecisionAndScale() throws Exception {
-    JsonSchema schema = new JsonSchema("""
+    Schema schema = JsonSchema.parse("""
         {"tables": [{"name": "t", "columns": [
           {"name": "d", "type": "decimal", "precision": 10, "scale": 2},
           {"name": "s", "type": "varchar", "length": 100},
@@ -226,7 +226,7 @@ class JsonSchemaTest {
   /** Tests parsing error with precision that is not an integer. */
   @Test void testPrecisionNotInteger() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [
               {"name": "c", "type": "varchar", "precision": "10"}
             ]}]}
@@ -239,7 +239,7 @@ class JsonSchemaTest {
   /** Tests parsing error with both precision and length specified. */
   @Test void testPrecisionAndLength() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [
               {"name": "c", "type": "varchar", "precision": 10, "length": 10}
             ]}]}
@@ -252,7 +252,7 @@ class JsonSchemaTest {
   /** Tests parsing error with precision for type that does not support it. */
   @Test void testPrecisionNotSupported() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [
               {"name": "c", "type": "integer", "precision": 5}
             ]}]}
@@ -265,7 +265,7 @@ class JsonSchemaTest {
   /** Tests parsing error with scale for type that does not support it. */
   @Test void testScaleNotSupported() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [
               {"name": "c", "type": "varchar", "length": 10, "scale": 2}
             ]}]}
@@ -277,7 +277,7 @@ class JsonSchemaTest {
   /** Tests parsing error with scale specified without precision. */
   @Test void testScaleWithoutPrecision() {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
-        () -> new JsonSchema("""
+        () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "columns": [
               {"name": "c", "type": "decimal", "scale": 2}
             ]}]}
@@ -288,7 +288,7 @@ class JsonSchemaTest {
 
   /** Tests tables in default schema. */
   @Test void testDefaultSchema() throws Exception {
-    JsonSchema schema = new JsonSchema();
+    Schema schema = JsonSchema.createDefault();
 
     assertThat(schema.tables().getNames(LikePattern.any()),
         containsInAnyOrder("users", "departments"));

@@ -17,7 +17,7 @@ import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.schema.Schema;
+import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
@@ -42,8 +42,8 @@ public class CalciteTutorialDatabase {
   /* Root Calcite schema */
   private CalciteSchema rootSchema;
 
-  /* Custom json schema */
-  private JsonSchema jsonSchema;
+  /* Database schema */
+  private AbstractSchema schema;
 
   /* Catalog reader */
   private CalciteCatalogReader catalogReader;
@@ -53,20 +53,20 @@ public class CalciteTutorialDatabase {
 
   /* Initializes all parts of database for processing queries */
   public CalciteTutorialDatabase() throws JsonProcessingException {
-    this(new JsonSchema());
+    this(JsonSchema.createDefault());
   }
 
   /* Initializes all parts of database for processing queries with specified schema */
-  public CalciteTutorialDatabase(JsonSchema jsonSchema) {
+  public CalciteTutorialDatabase(AbstractSchema schema) {
     // creating type factory
     typeFactory = new JavaTypeFactoryImpl();
 
     // creating root schema
     rootSchema = CalciteSchema.createRootSchema(false, false);
 
-    // adding JSON schema
-    this.jsonSchema = jsonSchema;
-    rootSchema.add(schemaName, jsonSchema);
+    // adding database schema
+    this.schema = schema;
+    rootSchema.add(schemaName, schema);
 
     // creating catalog reader
     CalciteConnectionConfig config =
@@ -78,9 +78,9 @@ public class CalciteTutorialDatabase {
     operatorTable = SqlStdOperatorTable.instance();
   }
 
-  /* Returns database Json schema */
-  public JsonSchema getJsonSchema() {
-    return jsonSchema;
+  /* Returns database schema */
+  public AbstractSchema getSchema() {
+    return schema;
   }
 
   /* Parses and validates query, and converts it to relational tree. */
