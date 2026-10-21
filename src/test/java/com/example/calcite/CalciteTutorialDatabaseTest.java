@@ -77,6 +77,8 @@ class CalciteTutorialDatabaseTest {
 
     // checking that right project contains only id field
     assertThat(right.getRowType().getFieldNames(), is(List.of("id")));
+  }
+
   /**
    * Tests processing COUNT(*) query for users table.
    * COUNT(*) may be broken if we don't use SqlStdOperatorTable.
