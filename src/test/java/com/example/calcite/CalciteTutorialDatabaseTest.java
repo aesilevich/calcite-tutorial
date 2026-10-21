@@ -77,5 +77,15 @@ class CalciteTutorialDatabaseTest {
 
     // checking that right project contains only id field
     assertThat(right.getRowType().getFieldNames(), is(List.of("id")));
+  /**
+   * Tests processing COUNT(*) query for users table.
+   * COUNT(*) may be broken if we don't use SqlStdOperatorTable.
+   */
+  @Test void testCountStar() throws Exception {
+    RelRoot root = database.processQuery("select count(*) from users");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("LogicalAggregate(group=[{}], EXPR$0=[COUNT()])\n"
+            + "  LogicalTableScan(table=[[tutorial, users]])\n"));
   }
 }
