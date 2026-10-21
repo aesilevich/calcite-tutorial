@@ -10,6 +10,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.calcite.DataContexts;
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -26,6 +27,7 @@ import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexExecutorImpl;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
@@ -95,8 +97,35 @@ public class CalciteTutorialDatabase {
     return schema;
   }
 
-  /* Parses and validates query, and converts it to relational tree. */
+  /* Parses and validates query, converts it to relational tree and optimizes it. */
   public RelRoot processQuery(String query) throws SqlParseException {
+    RelRoot root = convertQuery(query);
+    RelNode rel = root.rel;
+
+    // creating HEP planner
+    HepProgram program = HepProgram.builder()
+        .addRuleInstance(CoreRules.FILTER_REDUCE_EXPRESSIONS)
+        .addRuleInstance(CoreRules.PROJECT_REDUCE_EXPRESSIONS)
+        .addRuleCollection(List.of(
+            CoreRules.FILTER_SUB_QUERY_TO_CORRELATE,
+            CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE,
+            CoreRules.JOIN_SUB_QUERY_TO_CORRELATE))
+        .build();
+    HepPlanner hepPlanner = new HepPlanner(program);
+    hepPlanner.setRoot(root.rel);
+
+    // optimizing relation tree with HEP planner
+    rel = hepPlanner.findBestExp();
+
+    // decorrelating query
+    RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);
+    rel = RelDecorrelator.decorrelateQuery(rel, relBuilder);
+
+    return root.withRel(rel);
+  }
+
+  /* Parses and validates query, and converts it to relational tree without optimization. */
+  public RelRoot convertQuery(String query) throws SqlParseException {
     SqlParser.Config parserConfig = SqlParser.config()
         .withParserFactory(SqlParserImpl.FACTORY)
         .withCaseSensitive(false);
@@ -115,33 +144,16 @@ public class CalciteTutorialDatabase {
 
     // converting query to relational tree
     RelRoot root = converter.convertQuery(validatedNode, false, true);
-    RelNode rel = root.rel;
 
     // trimming unused fields
-    rel = converter.trimUnusedFields(true, rel);
-
-    // rewriting subqueries into correlates
-    HepProgram program = HepProgram.builder()
-        .addRuleCollection(List.of(
-            CoreRules.FILTER_SUB_QUERY_TO_CORRELATE,
-            CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE,
-            CoreRules.JOIN_SUB_QUERY_TO_CORRELATE))
-        .build();
-    HepPlanner hepPlanner = new HepPlanner(program);
-    hepPlanner.setRoot(rel);
-    rel = hepPlanner.findBestExp();
-
-    // decorrelating query
-    RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);
-    rel = RelDecorrelator.decorrelateQuery(rel, relBuilder);
-
-    return root.withRel(rel);
+    return root.withRel(converter.trimUnusedFields(true, root.rel));
   }
 
   /* Creates query planner */
   private VolcanoPlanner createPlanner() {
     VolcanoPlanner planner = new VolcanoPlanner();
     planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+    planner.setExecutor(new RexExecutorImpl(DataContexts.EMPTY));
     return planner;
   }
 
