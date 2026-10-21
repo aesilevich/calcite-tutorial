@@ -1,6 +1,11 @@
 package com.example.calcite;
 
 import com.example.calcite.parser.impl.SqlParserImpl;
+import com.example.calcite.physical.PhysicalConvention;
+import com.example.calcite.physical.PhysicalFilterRule;
+import com.example.calcite.physical.PhysicalProjectRule;
+import com.example.calcite.physical.PhysicalRelBuilder;
+import com.example.calcite.physical.PhysicalTableScanRule;
 import com.example.calcite.schema.JsonSchema;
 import com.example.calcite.sql.UnsupportedOperationValidator;
 import com.example.calcite.sql.OperatorTable;
@@ -17,6 +22,7 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.hep.HepPlanner;
 import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
@@ -96,9 +102,38 @@ public class CalciteTutorialDatabase {
     return schema;
   }
 
-  /* Parses and validates query, converts it to relational tree and optimizes it. */
-  public RelRoot processQuery(String query) throws SqlParseException {
-    RelRoot root = convertQuery(query);
+  /* Creates physical relational builder with new cluster */
+  public PhysicalRelBuilder createRelBuilder() {
+    return PhysicalRelBuilder.create(createCluster(), catalogReader);
+  }
+
+  /* Parses and validates query, and converts it to relational tree without optimization. */
+  public RelRoot convertQuery(String query) throws SqlParseException {
+    SqlParser.Config parserConfig = SqlParser.config()
+        .withParserFactory(SqlParserImpl.FACTORY)
+        .withCaseSensitive(false);
+  
+    SqlValidator validator = createValidator();
+    SqlToRelConverter converter = createConverter(validator);
+        
+    // parsing query
+    SqlNode node = SqlParser.create(query, parserConfig).parseQuery();
+
+    // validating query
+    SqlNode validatedNode = validator.validate(node);
+
+    // checking for unsupported operations
+    validatedNode.accept(new UnsupportedOperationValidator());
+
+    // converting query to relational tree
+    RelRoot root = converter.convertQuery(validatedNode, false, true);
+
+    // trimming unused fields
+    return root.withRel(converter.trimUnusedFields(true, root.rel));
+  }
+
+  /* Optimizes logical relational tree. */
+  public RelRoot optimizeQueryLogical(RelRoot root) {
     RelNode rel = root.rel;
 
     // creating HEP planner
@@ -135,29 +170,36 @@ public class CalciteTutorialDatabase {
     return root.withRel(rel);
   }
 
-  /* Parses and validates query, and converts it to relational tree without optimization. */
-  public RelRoot convertQuery(String query) throws SqlParseException {
-    SqlParser.Config parserConfig = SqlParser.config()
-        .withParserFactory(SqlParserImpl.FACTORY)
-        .withCaseSensitive(false);
-  
-    SqlValidator validator = createValidator();
-    SqlToRelConverter converter = createConverter(validator);
-        
-    // parsing query
-    SqlNode node = SqlParser.create(query, parserConfig).parseQuery();
+  /* Parses and validates query, converts it to logical relational tree and optimizes it. */
+  public RelRoot processQueryLogical(String query) throws SqlParseException {
+    return optimizeQueryLogical(convertQuery(query));
+  }
 
-    // validating query
-    SqlNode validatedNode = validator.validate(node);
+  /*
+   * Converts logical relational tree to physical relation tree with Volcano planner
+   * and optimizes it.
+   */
+  public RelRoot optimizeQueryPhysical(RelRoot root) {
+    RelNode rel = root.rel;
 
-    // checking for unsupported operations
-    validatedNode.accept(new UnsupportedOperationValidator());
+    // converting logical nodes to physical nodes with Volcano planner
+    RelOptPlanner volcanoPlanner = rel.getCluster().getPlanner();
+    volcanoPlanner.addRule(PhysicalTableScanRule.INSTANCE);
+    volcanoPlanner.addRule(PhysicalProjectRule.INSTANCE);
+    volcanoPlanner.addRule(PhysicalFilterRule.INSTANCE);
+    volcanoPlanner.setRoot(volcanoPlanner.changeTraits(rel,
+        rel.getTraitSet().replace(PhysicalConvention.INSTANCE)));
+    rel = volcanoPlanner.findBestExp();
 
-    // converting query to relational tree
-    RelRoot root = converter.convertQuery(validatedNode, false, true);
+    return root.withRel(rel);
+  }
 
-    // trimming unused fields
-    return root.withRel(converter.trimUnusedFields(true, root.rel));
+  /*
+   * Parses and validates query, converts it to relational tree and then performs
+   * all optimization on logical and physical level.
+   */
+  public RelRoot processQuery(String query) throws SqlParseException {
+    return optimizeQueryPhysical(processQueryLogical(query));
   }
 
   /* Creates query planner */

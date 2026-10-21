@@ -92,7 +92,7 @@ class AdvancedAbsTest {
   /** Tests that advanced ABS function can't be used with REAL. */
   @Test void testAbsFloat() {
     CalciteContextException e = assertThrows(CalciteContextException.class,
-        () -> database.processQuery("select abs(float32) from numbers"));
+        () -> database.processQueryLogical("select abs(float32) from numbers"));
 
     assertThat(e.getMessage(),
         containsString("Cannot apply 'ABS' to arguments of type 'ABS(<REAL>)'"));
@@ -101,7 +101,7 @@ class AdvancedAbsTest {
   /** Tests that advanced ABS function can't be used with VARCHAR. */
   @Test void testAbsString() {
     CalciteContextException e = assertThrows(CalciteContextException.class,
-        () -> database.processQuery("select abs(str) from numbers"));
+        () -> database.processQueryLogical("select abs(str) from numbers"));
 
     assertThat(e.getMessage(),
         containsString("Cannot apply 'ABS' to arguments of type 'ABS(<VARCHAR>)'"));
