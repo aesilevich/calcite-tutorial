@@ -6,6 +6,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalTableScan;
+import org.apache.calcite.runtime.CalciteContextException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -51,9 +52,10 @@ class CalciteTutorialDatabaseTest {
 
   /** Tests correct error reporting for unsupported ROLLUP operation */
   @Test void testRollup() {
-    UnsupportedOperationException e = assertThrows(UnsupportedOperationException.class,
+    CalciteContextException e = assertThrows(CalciteContextException.class,
         () -> database.processQuery("select dep_id from users group by rollup(dep_id)"));
 
-    assertThat(e.getMessage(), is("ROLLUP is not supported in this engine"));
+    assertThat(e.getMessage(), is("From line 1, column 35 to line 1, column 48: "
+        + "ROLLUP operation is not supported in this engine"));
   }
 }
