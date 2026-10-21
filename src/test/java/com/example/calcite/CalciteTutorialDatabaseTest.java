@@ -76,4 +76,28 @@ class CalciteTutorialDatabaseTest {
     assertThat(SubQueryChecker.containsSubQuery(root.rel), is(false));
     assertThat(CorrelateChecker.containsCorrelate(root.rel), is(false));
   }
+
+  /** Tests removing of nested subqueries in Filter + Project */
+  @Test void testNestedProjectSubQuery() throws Exception {
+    RelRoot root = database.processQuery("select d.name,\n"
+        + "  (select count(*) from users u\n"
+        + "   where u.dep_id = d.id\n"
+        + "   and exists (select 1 from departments d2 where d2.id = u.dep_id))\n"
+        + "from departments d");
+
+    assertThat(SubQueryChecker.containsSubQuery(root.rel), is(false));
+    assertThat(CorrelateChecker.containsCorrelate(root.rel), is(false));
+  }
+
+  /** Tests removing of nested subqueries in Join + Filter */
+  @Test void testNestedJoinSubQuery() throws Exception {
+    RelRoot root = database.processQuery("select u.name from users u\n"
+        + "join departments d on u.dep_id = d.id\n"
+        + "and exists (select 1 from users u2\n"
+        + "  where u2.dep_id = d.id\n"
+        + "  and u2.id in (select id from users u3 where u3.name = u2.name))");
+
+    assertThat(SubQueryChecker.containsSubQuery(root.rel), is(false));
+    assertThat(CorrelateChecker.containsCorrelate(root.rel), is(false));
+  }
 }

@@ -5,6 +5,7 @@ import com.example.calcite.schema.JsonSchema;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.Collections;
+import java.util.List;
 
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionProperty;
@@ -110,9 +111,10 @@ public class CalciteTutorialDatabase {
 
     // rewriting subqueries into correlates
     HepProgram program = HepProgram.builder()
-        .addRuleInstance(CoreRules.FILTER_SUB_QUERY_TO_CORRELATE)
-        .addRuleInstance(CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE)
-        .addRuleInstance(CoreRules.JOIN_SUB_QUERY_TO_CORRELATE)
+        .addRuleCollection(List.of(
+            CoreRules.FILTER_SUB_QUERY_TO_CORRELATE,
+            CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE,
+            CoreRules.JOIN_SUB_QUERY_TO_CORRELATE))
         .build();
     HepPlanner hepPlanner = new HepPlanner(program);
     hepPlanner.setRoot(root.rel);
