@@ -126,6 +126,14 @@ public class CalciteTutorialDatabase {
             CoreRules.FILTER_SUB_QUERY_TO_CORRELATE,
             CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE,
             CoreRules.JOIN_SUB_QUERY_TO_CORRELATE))
+        .addRuleCollection(List.of(
+            CoreRules.FILTER_PROJECT_TRANSPOSE,
+            CoreRules.FILTER_INTO_JOIN,
+            CoreRules.JOIN_CONDITION_PUSH,
+            CoreRules.FILTER_AGGREGATE_TRANSPOSE,
+            CoreRules.FILTER_SET_OP_TRANSPOSE,
+            CoreRules.FILTER_MERGE,
+            CoreRules.JOIN_PUSH_EXPRESSIONS))
         .build();
     HepPlanner hepPlanner = new HepPlanner(program);
     hepPlanner.setRoot(rel);
