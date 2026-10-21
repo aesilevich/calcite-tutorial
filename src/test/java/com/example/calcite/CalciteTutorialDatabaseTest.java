@@ -1,9 +1,12 @@
 package com.example.calcite;
 
+import java.util.List;
+
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalTableScan;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +49,34 @@ class CalciteTutorialDatabaseTest {
     assertThat(RelOptUtil.toString(root.rel),
         is("LogicalProject(id=[$0], name=[$1], dep_id=[$2])\n"
             + "  LogicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests trimming of unused fields in query with join */
+  @Test void testTrimUnusedFields() throws Exception {
+    RelRoot root = database.processQuery(
+        "select u.name from users u join departments d on u.dep_id = d.id");
+
+    // checking that root node is logical project
+    assertThat(root.rel, instanceOf(LogicalProject.class));
+    LogicalProject project = (LogicalProject) root.rel;
+
+    // checking that input of project node is logical join
+    assertThat(project.getInput(), instanceOf(LogicalJoin.class));
+    LogicalJoin join = (LogicalJoin) project.getInput();
+
+    // checking that first argument of join is logical project
+    assertThat(join.getLeft(), instanceOf(LogicalProject.class));
+    LogicalProject left = (LogicalProject) join.getLeft();
+
+    // checking that left contains only name and dep_id fields
+    assertThat(left.getRowType().getFieldNames(), is(List.of("name", "dep_id")));
+
+    // checking that second argument of join is logical project
+    assertThat(join.getRight(), instanceOf(LogicalProject.class));
+    LogicalProject right = (LogicalProject) join.getRight();
+
+    // checking that right project contains only id field
+    assertThat(right.getRowType().getFieldNames(), is(List.of("id")));
   }
 
   /**
