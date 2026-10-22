@@ -3,6 +3,8 @@ package com.example.calcite;
 import com.example.calcite.parser.impl.SqlParserImpl;
 import com.example.calcite.schema.JsonSchema;
 import com.example.calcite.sql.UnsupportedOperationValidator;
+import com.example.calcite.sql.OperatorTable;
+import com.example.calcite.sql.StandardOperatorTableWithoutAbs;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.Collections;
@@ -15,15 +17,16 @@ import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.util.SqlOperatorTables;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
@@ -75,8 +78,9 @@ public class CalciteTutorialDatabase {
     catalogReader = new CalciteCatalogReader(rootSchema,
         Collections.singletonList(schemaName), typeFactory, config);
 
-    // creating operator table
-    operatorTable = SqlStdOperatorTable.instance();
+    // using standard operator table with ABS replaced by advanced ABS function
+    operatorTable = SqlOperatorTables.chain(OperatorTable.instance(),
+        new StandardOperatorTableWithoutAbs().init());
   }
 
   /* Returns database schema */
@@ -103,7 +107,13 @@ public class CalciteTutorialDatabase {
     validatedNode.accept(new UnsupportedOperationValidator());
 
     // converting query to relational tree
-    return converter.convertQuery(validatedNode, false, true);
+    RelRoot root = converter.convertQuery(validatedNode, false, true);
+    RelNode rel = root.rel;
+
+    // trimming unused fields
+    rel = converter.trimUnusedFields(true, root.rel);
+
+    return root.withRel(rel);
   }
 
   /* Creates query planner */
