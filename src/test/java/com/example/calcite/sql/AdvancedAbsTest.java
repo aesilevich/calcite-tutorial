@@ -113,7 +113,7 @@ class AdvancedAbsTest {
    */
   private void checkAbs(String function, String operand, String expectedType) throws Exception {
     RelRoot root =
-        database.processQuery("select " + function + "(" + operand + ") from numbers");
+        database.convertQuery("select " + function + "(" + operand + ") from numbers");
 
     // checking that custom function is used
     LogicalProject project = (LogicalProject) root.rel;

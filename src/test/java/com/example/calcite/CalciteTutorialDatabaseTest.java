@@ -154,4 +154,13 @@ class CalciteTutorialDatabaseTest {
         is("LogicalAggregate(group=[{}], EXPR$0=[COUNT()])\n"
             + "  LogicalTableScan(table=[[tutorial, users]])\n"));
   }
+
+  /** Tests reducing of constant expression 1 + 2 */
+  @Test void testReduceConstantExpression() throws Exception {
+    RelRoot root = database.processQuery("select id, 1 + 2 from users");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("LogicalProject(ID=[$0], EXPR$1=[3])\n"
+            + "  LogicalTableScan(table=[[tutorial, users]])\n"));
+  }
 }
