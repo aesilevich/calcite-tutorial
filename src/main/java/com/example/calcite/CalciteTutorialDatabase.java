@@ -5,6 +5,7 @@ import com.example.calcite.physical.PhysicalConvention;
 import com.example.calcite.physical.PhysicalFilterRule;
 import com.example.calcite.physical.PhysicalFilterScanRule;
 import com.example.calcite.physical.PhysicalProjectRule;
+import com.example.calcite.physical.PhysicalProjectScanRule;
 import com.example.calcite.physical.PhysicalRelBuilder;
 import com.example.calcite.physical.PhysicalTableScanRule;
 import com.example.calcite.schema.JsonSchema;
@@ -190,6 +191,7 @@ public class CalciteTutorialDatabase {
     volcanoPlanner.addRule(PhysicalProjectRule.INSTANCE);
     volcanoPlanner.addRule(PhysicalFilterRule.INSTANCE);
     volcanoPlanner.addRule(PhysicalFilterScanRule.INSTANCE);
+    volcanoPlanner.addRule(PhysicalProjectScanRule.INSTANCE);
     volcanoPlanner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
     volcanoPlanner.addRule(CoreRules.FILTER_AGGREGATE_TRANSPOSE);
     volcanoPlanner.addRule(CoreRules.FILTER_SET_OP_TRANSPOSE);
