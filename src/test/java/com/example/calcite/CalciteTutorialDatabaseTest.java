@@ -9,6 +9,7 @@ import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalTableScan;
+import org.apache.calcite.runtime.CalciteContextException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -19,6 +20,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Tests for CalciteTutorialDatabase. */
 class CalciteTutorialDatabaseTest {
@@ -49,6 +51,15 @@ class CalciteTutorialDatabaseTest {
     assertThat(RelOptUtil.toString(root.rel),
         is("LogicalProject(id=[$0], name=[$1], dep_id=[$2])\n"
             + "  LogicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests correct error reporting for unsupported ROLLUP operation */
+  @Test void testRollup() {
+    CalciteContextException e = assertThrows(CalciteContextException.class,
+        () -> database.processQuery("select dep_id from users group by rollup(dep_id)"));
+
+    assertThat(e.getMessage(), is("From line 1, column 35 to line 1, column 48: "
+        + "ROLLUP operation is not supported in this engine"));
   }
 
   /** Tests trimming of unused fields in query with join */
