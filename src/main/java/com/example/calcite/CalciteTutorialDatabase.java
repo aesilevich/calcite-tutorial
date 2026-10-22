@@ -2,6 +2,9 @@ package com.example.calcite;
 
 import com.example.calcite.parser.impl.SqlParserImpl;
 import com.example.calcite.schema.JsonSchema;
+import com.example.calcite.sql.UnsupportedOperationValidator;
+import com.example.calcite.sql.OperatorTable;
+import com.example.calcite.sql.StandardOperatorTableWithoutAbs;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.Collections;
@@ -26,9 +29,9 @@ import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.util.SqlOperatorTables;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.sql2rel.RelDecorrelator;
@@ -82,8 +85,9 @@ public class CalciteTutorialDatabase {
     catalogReader = new CalciteCatalogReader(rootSchema,
         Collections.singletonList(schemaName), typeFactory, config);
 
-    // creating operator table
-    operatorTable = SqlStdOperatorTable.instance();
+    // using standard operator table with ABS replaced by advanced ABS function
+    operatorTable = SqlOperatorTables.chain(OperatorTable.instance(),
+        new StandardOperatorTableWithoutAbs().init());
   }
 
   /* Returns database schema */
@@ -106,8 +110,15 @@ public class CalciteTutorialDatabase {
     // validating query
     SqlNode validatedNode = validator.validate(node);
 
+    // checking for unsupported operations
+    validatedNode.accept(new UnsupportedOperationValidator());
+
     // converting query to relational tree
     RelRoot root = converter.convertQuery(validatedNode, false, true);
+    RelNode rel = root.rel;
+
+    // trimming unused fields
+    rel = converter.trimUnusedFields(true, rel);
 
     // rewriting subqueries into correlates
     HepProgram program = HepProgram.builder()
@@ -117,8 +128,8 @@ public class CalciteTutorialDatabase {
             CoreRules.JOIN_SUB_QUERY_TO_CORRELATE))
         .build();
     HepPlanner hepPlanner = new HepPlanner(program);
-    hepPlanner.setRoot(root.rel);
-    RelNode rel = hepPlanner.findBestExp();
+    hepPlanner.setRoot(rel);
+    rel = hepPlanner.findBestExp();
 
     // decorrelating query
     RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);

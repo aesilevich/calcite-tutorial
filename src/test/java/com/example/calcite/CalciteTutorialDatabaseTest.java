@@ -1,11 +1,15 @@
 package com.example.calcite;
 
+import java.util.List;
+
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.rel.logical.LogicalJoin;
 import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rel.logical.LogicalTableScan;
+import org.apache.calcite.runtime.CalciteContextException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -16,6 +20,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** Tests for CalciteTutorialDatabase. */
 class CalciteTutorialDatabaseTest {
@@ -99,5 +104,54 @@ class CalciteTutorialDatabaseTest {
 
     assertThat(SubQueryChecker.containsSubQuery(root.rel), is(false));
     assertThat(CorrelateChecker.containsCorrelate(root.rel), is(false));
+  }
+
+  /** Tests correct error reporting for unsupported ROLLUP operation */
+  @Test void testRollup() {
+    CalciteContextException e = assertThrows(CalciteContextException.class,
+        () -> database.processQuery("select dep_id from users group by rollup(dep_id)"));
+
+    assertThat(e.getMessage(), is("From line 1, column 35 to line 1, column 48: "
+        + "ROLLUP operation is not supported in this engine"));
+  }
+
+  /** Tests trimming of unused fields in query with join */
+  @Test void testTrimUnusedFields() throws Exception {
+    RelRoot root = database.processQuery(
+        "select u.name from users u join departments d on u.dep_id = d.id");
+
+    // checking that root node is logical project
+    assertThat(root.rel, instanceOf(LogicalProject.class));
+    LogicalProject project = (LogicalProject) root.rel;
+
+    // checking that input of project node is logical join
+    assertThat(project.getInput(), instanceOf(LogicalJoin.class));
+    LogicalJoin join = (LogicalJoin) project.getInput();
+
+    // checking that first argument of join is logical project
+    assertThat(join.getLeft(), instanceOf(LogicalProject.class));
+    LogicalProject left = (LogicalProject) join.getLeft();
+
+    // checking that left contains only name and dep_id fields
+    assertThat(left.getRowType().getFieldNames(), is(List.of("name", "dep_id")));
+
+    // checking that second argument of join is logical project
+    assertThat(join.getRight(), instanceOf(LogicalProject.class));
+    LogicalProject right = (LogicalProject) join.getRight();
+
+    // checking that right project contains only id field
+    assertThat(right.getRowType().getFieldNames(), is(List.of("id")));
+  }
+
+  /**
+   * Tests processing COUNT(*) query for users table.
+   * COUNT(*) may be broken if we don't use SqlStdOperatorTable.
+   */
+  @Test void testCountStar() throws Exception {
+    RelRoot root = database.processQuery("select count(*) from users");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("LogicalAggregate(group=[{}], EXPR$0=[COUNT()])\n"
+            + "  LogicalTableScan(table=[[tutorial, users]])\n"));
   }
 }
