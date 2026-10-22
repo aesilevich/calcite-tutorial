@@ -14,6 +14,7 @@ import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.runtime.CalciteContextException;
 import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.util.ImmutableIntList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -228,9 +229,8 @@ class CalciteTutorialDatabaseTest {
     RelRoot root = database.processQuery("select name from users where id > 10");
 
     assertThat(RelOptUtil.toString(root.rel),
-        is("PhysicalProject(NAME=[$1])\n"
-            + "  PhysicalProject(id=[$0], name=[$1])\n"
-            + "    PhysicalTableScan(table=[[tutorial, users]], filter=[>($0, 10)])\n"));
+        is("PhysicalTableScan(table=[[tutorial, users]], filter=[>($0, 10)], "
+            + "projection=[[1]])\n"));
   }
 
   /** Tests pushing single filter into physical table scan */
@@ -256,7 +256,7 @@ class CalciteTutorialDatabaseTest {
     TableScan logicalScan = (TableScan) builder.build();
     RelNode scan = new PhysicalTableScan(logicalScan.getCluster(),
         logicalScan.getTraitSet().replace(PhysicalConvention.INSTANCE),
-        logicalScan.getHints(), logicalScan.getTable(), scanFilter);
+        logicalScan.getHints(), logicalScan.getTable(), scanFilter, null);
 
     // adding filter on top of physical scan
     RelNode rel = builder
@@ -361,8 +361,8 @@ class CalciteTutorialDatabaseTest {
     assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
   }
 
-  /** Tests converting logical project to physical project */
-  @Test void testPhysicalProject() {
+  /** Tests converting logical project + scan into physical scan with project */
+  @Test void testConvertLogicalProjectAndScan() {
     PhysicalRelBuilder builder = database.createRelBuilder();
     RelNode logical = builder
         .scan("tutorial", "users")
@@ -370,7 +370,7 @@ class CalciteTutorialDatabaseTest {
         .build();
     RelNode expected = builder
         .physicalScan("tutorial", "users")
-        .physicalProject(builder.field("dep_id"), builder.field("name"))
+            .withProjection(builder.field("dep_id"), builder.field("name"))
         .build();
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(logical, SqlKind.SELECT));
@@ -393,8 +393,8 @@ class CalciteTutorialDatabaseTest {
     assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
   }
 
-  /** Tests converting logical project with physical table scan to physical nodes */
-  @Test void testPhysicalProjectWithPhysicalScan() {
+  /** Tests pushing logical project into physical scan */
+  @Test void testPushLogicalProjectIntoPhysicalScan() {
     PhysicalRelBuilder builder = database.createRelBuilder();
     RelNode original = builder
         .physicalScan("tutorial", "users")
@@ -402,7 +402,41 @@ class CalciteTutorialDatabaseTest {
         .build();
     RelNode expected = builder
         .physicalScan("tutorial", "users")
-        .physicalProject(builder.field("dep_id"), builder.field("name"))
+            .withProjection(builder.field("dep_id"), builder.field("name"))
+        .build();
+
+    RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests converting logical project with expression and physical scan to physical nodes */
+  @Test void testPhysicalProjectExpressionWithPhysicalScan() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    RelNode original = builder
+        .physicalScan("tutorial", "users")
+        .project(builder.call(SqlStdOperatorTable.PLUS, builder.field("id"), builder.literal(1)))
+        .build();
+    RelNode expected = builder
+        .physicalScan("tutorial", "users")
+        .physicalProject(
+            builder.call(SqlStdOperatorTable.PLUS, builder.field("id"), builder.literal(1)))
+        .build();
+
+    RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests pushing logical project into physical scan that already has projection */
+  @Test void testPushLogicalProjectIntoPhysicalScanWithProjection() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    RelNode original = builder
+        .physicalScan("tutorial", "users")
+            .withProjection(builder.field("dep_id"), builder.field("name"), builder.field("id"))
+        .project(builder.field("name"), builder.field("id"))
+        .build();
+    RelNode expected = builder
+        .physicalScan("tutorial", "users")
+        .withProjection(builder.field("name"), builder.field("id"))
         .build();
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
@@ -410,8 +444,27 @@ class CalciteTutorialDatabaseTest {
   }
 
   /**
-   * Tests pushing logical filter condition into physical scan,
-   * with additional logical project on top of it
+   * Tests pushing logical project that switches order of two fields into physical scan
+   * that already has projection
+   */
+  @Test void testPushLogicalProjectSwitchingFieldsIntoPhysicalScanWithProjection() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    RelNode original = builder
+        .physicalScan("tutorial", "users")
+            .withProjection(builder.field("dep_id"), builder.field("name"))
+        .project(builder.field("name"), builder.field("dep_id"))
+        .build();
+    RelNode expected = builder
+        .physicalScan("tutorial", "users")
+            .withProjection(builder.field("name"), builder.field("dep_id"))
+        .build();
+
+    RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
+  }
+
+  /**
+   * Tests pushing logical project + filter into physical scan.
    */
   @Test void testPushLogicalFilterAndProjectIntoPhysicalScan() {
     PhysicalRelBuilder builder = database.createRelBuilder();
@@ -423,7 +476,7 @@ class CalciteTutorialDatabaseTest {
     RelNode expected = builder
         .physicalScan("tutorial", "users")
             .withFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
-        .physicalProject(builder.field("dep_id"), builder.field("name"))
+            .withProjection(builder.field("dep_id"), builder.field("name"))
         .build();
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
@@ -431,7 +484,7 @@ class CalciteTutorialDatabaseTest {
   }
 
   /**
-   * Tests pushing logical filter condition into physical scan through logical project
+   * Tests pushing logical filter + project into physical scan
    */
   @Test void testPushLogicalFilterIntoPhysicalScanThroughLogicalProject() {
     PhysicalRelBuilder builder = database.createRelBuilder();
@@ -443,7 +496,7 @@ class CalciteTutorialDatabaseTest {
     RelNode expected = builder
         .physicalScan("tutorial", "users")
             .withFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
-        .physicalProject(builder.field("dep_id"), builder.field("name"), builder.field("id"))
+            .withProjection(builder.field("dep_id"), builder.field("name"), builder.field("id"))
         .build();
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
@@ -451,9 +504,9 @@ class CalciteTutorialDatabaseTest {
   }
 
   /**
-   * Tests pushing physical filter condition into physical scan through physical project
+   * Tests pushing physical filter + project into physical scan
    */
-  @Test void testPushPhysicalFilterIntoPhysicalScanThroughPhysicalProject() {
+  @Test void testPushPhysicalFilterAndProjectIntoPhysicalScan() {
     PhysicalRelBuilder builder = database.createRelBuilder();
     RelNode original = builder
         .physicalScan("tutorial", "users")
@@ -463,7 +516,7 @@ class CalciteTutorialDatabaseTest {
     RelNode expected = builder
         .physicalScan("tutorial", "users")
             .withFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
-        .physicalProject(builder.field("dep_id"), builder.field("name"), builder.field("id"))
+            .withProjection(builder.field("dep_id"), builder.field("name"), builder.field("id"))
         .build();
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
@@ -479,7 +532,7 @@ class CalciteTutorialDatabaseTest {
         .build();
     RelNode expected = builder
         .physicalScan("tutorial", "users")
-        .withFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
+            .withFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
         .build();
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
@@ -491,14 +544,14 @@ class CalciteTutorialDatabaseTest {
     PhysicalRelBuilder builder = database.createRelBuilder();
     RelNode original = builder
         .physicalScan("tutorial", "users")
-        .withFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
+            .withFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
         .physicalFilter(builder.greaterThan(builder.field("dep_id"), builder.literal(1)))
         .build();
     RelNode expected = builder
         .physicalScan("tutorial", "users")
-        .withFilter(builder.and(
-            builder.greaterThan(builder.field("id"), builder.literal(10)),
-            builder.greaterThan(builder.field("dep_id"), builder.literal(1))))
+            .withFilter(builder.and(
+                builder.greaterThan(builder.field("id"), builder.literal(10)),
+                builder.greaterThan(builder.field("dep_id"), builder.literal(1))))
         .build();
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
@@ -519,9 +572,9 @@ class CalciteTutorialDatabaseTest {
         .build();
     RelNode expected = builder
         .physicalScan("tutorial", "users")
-        .withFilter(builder.greaterThan(
-            builder.call(SqlStdOperatorTable.PLUS, builder.field("id"), builder.literal(1)),
-            builder.literal(10)))
+            .withFilter(builder.greaterThan(
+                builder.call(SqlStdOperatorTable.PLUS, builder.field("id"), builder.literal(1)),
+                builder.literal(10)))
         .physicalProject(
             builder.call(SqlStdOperatorTable.PLUS, builder.field("id"), builder.literal(1)),
             builder.field("name"))
@@ -531,7 +584,7 @@ class CalciteTutorialDatabaseTest {
     assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
   }
 
-  /** Tests pushing logical filter condition into physical scan through two physical projects */
+  /** Tests pushing logical filter and multiple projects into physical scan */
   @Test void testPushLogicalFilterIntoPhysicalScanThroughTwoPhysicalProjects() {
     PhysicalRelBuilder builder = database.createRelBuilder();
     builder
@@ -543,12 +596,45 @@ class CalciteTutorialDatabaseTest {
         .build();
     RelNode expected = builder
         .physicalScan("tutorial", "users")
-        .withFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
-        .physicalProject(builder.field("dep_id"), builder.field("name"), builder.field("id"))
-        .physicalProject(builder.field("id"), builder.field("name"))
+            .withFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
+            .withProjection(builder.field("id"), builder.field("name"))
         .build();
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
     assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests pushing single project into physical table scan */
+  @Test void testPushProjectIntoScan() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    RelNode rel = builder
+        .scan("tutorial", "users")
+        .project(builder.field("dep_id"), builder.field("name"))
+        .build();
+
+    RelRoot root = database.optimizeQueryPhysical(RelRoot.of(rel, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalTableScan(table=[[tutorial, users]], projection=[[2, 1]])\n"));
+  }
+
+  /** Tests pushing of project into physical table scan that already has projection */
+  @Test void testPushProjectIntoScanWithProjection() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+
+    // creating physical scan with projection (dep_id, id, name)
+    TableScan logicalScan = (TableScan) builder.scan("tutorial", "users").build();
+    RelNode scan = new PhysicalTableScan(logicalScan.getCluster(),
+        logicalScan.getTraitSet().replace(PhysicalConvention.INSTANCE),
+        logicalScan.getHints(), logicalScan.getTable(), null, ImmutableIntList.of(2, 0, 1));
+
+    // adding project (name, dep_id) on top of physical scan
+    RelNode rel = builder
+        .push(scan)
+        .project(builder.field("name"), builder.field("dep_id"))
+        .build();
+
+    RelRoot root = database.optimizeQueryPhysical(RelRoot.of(rel, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalTableScan(table=[[tutorial, users]], projection=[[1, 2]])\n"));
   }
 }

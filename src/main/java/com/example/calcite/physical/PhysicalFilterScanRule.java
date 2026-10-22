@@ -29,7 +29,7 @@ public class PhysicalFilterScanRule extends RelRule<PhysicalFilterScanRule.Confi
     }
 
     call.transformTo(new PhysicalTableScan(scan.getCluster(), scan.getTraitSet(),
-        scan.getHints(), scan.getTable(), condition));
+        scan.getHints(), scan.getTable(), condition, null));
   }
 
   /** Rule configuration. */
@@ -38,7 +38,9 @@ public class PhysicalFilterScanRule extends RelRule<PhysicalFilterScanRule.Confi
     Config DEFAULT = ImmutablePhysicalFilterScanRule.Config.of()
         .withOperandSupplier(b0 ->
             b0.operand(PhysicalFilter.class).oneInput(b1 ->
-                b1.operand(PhysicalTableScan.class).noInputs()))
+                b1.operand(PhysicalTableScan.class)
+                    .predicate(scan -> scan.getProjection() == null)
+                    .noInputs()))
         .as(Config.class);
 
     @Override default PhysicalFilterScanRule toRule() {
