@@ -189,4 +189,13 @@ class CalciteTutorialDatabaseTest {
             + "    LogicalProject(id=[$0])\n"
             + "      LogicalTableScan(table=[[tutorial, departments]])\n"));
   }
+
+  /** Tests reducing advanced ABS function without overflow for minimal SMALLINT value */
+  @Test void testReduceAbs() throws Exception {
+    RelRoot root = database.processQuery("select abs(cast(-32768 as smallint)) from users");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("LogicalProject(EXPR$0=[32768])\n"
+            + "  LogicalTableScan(table=[[tutorial, users]])\n"));
+  }
 }

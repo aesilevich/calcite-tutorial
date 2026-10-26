@@ -4,13 +4,13 @@ import com.example.calcite.parser.impl.SqlParserImpl;
 import com.example.calcite.schema.JsonSchema;
 import com.example.calcite.sql.UnsupportedOperationValidator;
 import com.example.calcite.sql.OperatorTable;
+import com.example.calcite.sql.RexExecutor;
 import com.example.calcite.sql.StandardOperatorTableWithoutAbs;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.calcite.DataContexts;
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.jdbc.CalciteSchema;
@@ -27,7 +27,6 @@ import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.rex.RexExecutorImpl;
 import org.apache.calcite.schema.impl.AbstractSchema;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
@@ -157,7 +156,7 @@ public class CalciteTutorialDatabase {
   private VolcanoPlanner createPlanner() {
     VolcanoPlanner planner = new VolcanoPlanner();
     planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
-    planner.setExecutor(new RexExecutorImpl(DataContexts.EMPTY));
+    planner.setExecutor(new RexExecutor());
     return planner;
   }
 
