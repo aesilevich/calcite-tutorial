@@ -154,4 +154,19 @@ class CalciteTutorialDatabaseTest {
         is("LogicalAggregate(group=[{}], EXPR$0=[COUNT()])\n"
             + "  LogicalTableScan(table=[[tutorial, users]])\n"));
   }
+
+  /** Tests pushing down of filter below aggregate */
+  @Test void testFilterPushDown() throws Exception {
+    RelRoot root = database.processQuery("select t.dep_id from (\n"
+        + "  select dep_id, avg(id) as avg_id from users group by dep_id having avg(id) > 10\n"
+        + ") as t where t.dep_id > 5");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("LogicalProject(DEP_ID=[$0])\n"
+            + "  LogicalFilter(condition=[>($1, 10)])\n"
+            + "    LogicalAggregate(group=[{0}], AVG_ID=[AVG($1)])\n"
+            + "      LogicalProject(dep_id=[$2], id=[$0])\n"
+            + "        LogicalFilter(condition=[>($2, 5)])\n"
+            + "          LogicalTableScan(table=[[tutorial, users]])\n"));
+  }
 }
