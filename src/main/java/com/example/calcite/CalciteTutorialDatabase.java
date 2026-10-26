@@ -104,12 +104,16 @@ public class CalciteTutorialDatabase {
 
     // creating HEP planner
     HepProgram program = HepProgram.builder()
-        .addRuleInstance(CoreRules.FILTER_REDUCE_EXPRESSIONS)
-        .addRuleInstance(CoreRules.PROJECT_REDUCE_EXPRESSIONS)
         .addRuleCollection(List.of(
             CoreRules.FILTER_SUB_QUERY_TO_CORRELATE,
             CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE,
-            CoreRules.JOIN_SUB_QUERY_TO_CORRELATE))
+            CoreRules.JOIN_SUB_QUERY_TO_CORRELATE,
+
+            CoreRules.FILTER_REDUCE_EXPRESSIONS,
+            CoreRules.PROJECT_REDUCE_EXPRESSIONS,
+            CoreRules.JOIN_REDUCE_EXPRESSIONS,
+            CoreRules.CALC_REDUCE_EXPRESSIONS,
+            CoreRules.WINDOW_REDUCE_EXPRESSIONS))
         .build();
     HepPlanner hepPlanner = new HepPlanner(program);
     hepPlanner.setRoot(root.rel);
