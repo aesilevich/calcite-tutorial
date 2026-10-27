@@ -4,6 +4,7 @@ import com.example.calcite.parser.impl.SqlParserImpl;
 import com.example.calcite.schema.JsonSchema;
 import com.example.calcite.sql.UnsupportedOperationValidator;
 import com.example.calcite.sql.OperatorTable;
+import com.example.calcite.sql.RexExecutor;
 import com.example.calcite.sql.StandardOperatorTableWithoutAbs;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
@@ -95,8 +96,47 @@ public class CalciteTutorialDatabase {
     return schema;
   }
 
-  /* Parses and validates query, and converts it to relational tree. */
+  /* Parses and validates query, converts it to relational tree and optimizes it. */
   public RelRoot processQuery(String query) throws SqlParseException {
+    RelRoot root = convertQuery(query);
+    RelNode rel = root.rel;
+
+    // creating HEP planner
+    HepProgram program = HepProgram.builder()
+        .addRuleCollection(List.of(
+            CoreRules.FILTER_SUB_QUERY_TO_CORRELATE,
+            CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE,
+            CoreRules.JOIN_SUB_QUERY_TO_CORRELATE,
+
+            CoreRules.FILTER_REDUCE_EXPRESSIONS,
+            CoreRules.PROJECT_REDUCE_EXPRESSIONS,
+            CoreRules.JOIN_REDUCE_EXPRESSIONS,
+            CoreRules.CALC_REDUCE_EXPRESSIONS,
+            CoreRules.WINDOW_REDUCE_EXPRESSIONS))
+        .addRuleCollection(List.of(
+            CoreRules.FILTER_PROJECT_TRANSPOSE,
+            CoreRules.FILTER_INTO_JOIN,
+            CoreRules.JOIN_CONDITION_PUSH,
+            CoreRules.FILTER_AGGREGATE_TRANSPOSE,
+            CoreRules.FILTER_SET_OP_TRANSPOSE,
+            CoreRules.FILTER_MERGE,
+            CoreRules.JOIN_PUSH_EXPRESSIONS))
+        .build();
+    HepPlanner hepPlanner = new HepPlanner(program);
+    hepPlanner.setRoot(root.rel);
+
+    // optimizing relation tree with HEP planner
+    rel = hepPlanner.findBestExp();
+
+    // decorrelating query
+    RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);
+    rel = RelDecorrelator.decorrelateQuery(rel, relBuilder);
+
+    return root.withRel(rel);
+  }
+
+  /* Parses and validates query, and converts it to relational tree without optimization. */
+  public RelRoot convertQuery(String query) throws SqlParseException {
     SqlParser.Config parserConfig = SqlParser.config()
         .withParserFactory(SqlParserImpl.FACTORY)
         .withCaseSensitive(false);
@@ -115,41 +155,16 @@ public class CalciteTutorialDatabase {
 
     // converting query to relational tree
     RelRoot root = converter.convertQuery(validatedNode, false, true);
-    RelNode rel = root.rel;
 
     // trimming unused fields
-    rel = converter.trimUnusedFields(true, rel);
-
-    // rewriting subqueries into correlates
-    HepProgram program = HepProgram.builder()
-        .addRuleCollection(List.of(
-            CoreRules.FILTER_SUB_QUERY_TO_CORRELATE,
-            CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE,
-            CoreRules.JOIN_SUB_QUERY_TO_CORRELATE))
-        .addRuleCollection(List.of(
-            CoreRules.FILTER_PROJECT_TRANSPOSE,
-            CoreRules.FILTER_INTO_JOIN,
-            CoreRules.JOIN_CONDITION_PUSH,
-            CoreRules.FILTER_AGGREGATE_TRANSPOSE,
-            CoreRules.FILTER_SET_OP_TRANSPOSE,
-            CoreRules.FILTER_MERGE,
-            CoreRules.JOIN_PUSH_EXPRESSIONS))
-        .build();
-    HepPlanner hepPlanner = new HepPlanner(program);
-    hepPlanner.setRoot(rel);
-    rel = hepPlanner.findBestExp();
-
-    // decorrelating query
-    RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);
-    rel = RelDecorrelator.decorrelateQuery(rel, relBuilder);
-
-    return root.withRel(rel);
+    return root.withRel(converter.trimUnusedFields(true, root.rel));
   }
 
   /* Creates query planner */
   private VolcanoPlanner createPlanner() {
     VolcanoPlanner planner = new VolcanoPlanner();
     planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+    planner.setExecutor(new RexExecutor());
     return planner;
   }
 

@@ -155,6 +155,51 @@ class CalciteTutorialDatabaseTest {
             + "  LogicalTableScan(table=[[tutorial, users]])\n"));
   }
 
+  /** Tests reducing of constant expression 1 + 2 */
+  @Test void testReduceConstantExpression() throws Exception {
+    RelRoot root = database.processQuery("select id, 1 + 2 from users");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("LogicalProject(ID=[$0], EXPR$1=[3])\n"
+            + "  LogicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests reducing constant additions in nested queries */
+  @Test void testReduceConstantExpressionInNestedQuery() throws Exception {
+    RelRoot root = database.processQuery("select a + (1 + 2) from (\n"
+        + "  select id + (3 + 4) as a from users where id > 2 * 5\n"
+        + ") as t");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("LogicalProject(EXPR$0=[+(+($0, 7), 3)])\n"
+            + "  LogicalProject(id=[$0])\n"
+            + "    LogicalFilter(condition=[>($0, 10)])\n"
+            + "      LogicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests reducing constant addition in join condition */
+  @Test void testReduceConstantExpressionInJoin() throws Exception {
+    RelRoot root = database.processQuery("select u.name from users u\n"
+        + "join departments d on u.dep_id = d.id and u.id > 2 + 5");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("LogicalProject(NAME=[$1])\n"
+            + "  LogicalJoin(condition=[=($2, $3)], joinType=[inner])\n"
+            + "    LogicalFilter(condition=[>($0, 7)])\n"
+            + "      LogicalTableScan(table=[[tutorial, users]])\n"
+            + "    LogicalProject(id=[$0])\n"
+            + "      LogicalTableScan(table=[[tutorial, departments]])\n"));
+  }
+
+  /** Tests reducing advanced ABS function without overflow for minimal SMALLINT value */
+  @Test void testReduceAbs() throws Exception {
+    RelRoot root = database.processQuery("select abs(cast(-32768 as smallint)) from users");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("LogicalProject(EXPR$0=[32768])\n"
+            + "  LogicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
   /** Tests pushing down of filter below aggregate */
   @Test void testFilterPushDown() throws Exception {
     RelRoot root = database.processQuery("select t.dep_id from (\n"
