@@ -3,6 +3,7 @@ package com.example.calcite;
 import com.example.calcite.parser.impl.SqlParserImpl;
 import com.example.calcite.physical.PhysicalConvention;
 import com.example.calcite.physical.PhysicalFilterRule;
+import com.example.calcite.physical.PhysicalFilterScanRule;
 import com.example.calcite.physical.PhysicalProjectRule;
 import com.example.calcite.physical.PhysicalRelBuilder;
 import com.example.calcite.physical.PhysicalTableScanRule;
@@ -23,6 +24,7 @@ import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
+import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.plan.hep.HepPlanner;
 import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
@@ -187,8 +189,17 @@ public class CalciteTutorialDatabase {
     volcanoPlanner.addRule(PhysicalTableScanRule.INSTANCE);
     volcanoPlanner.addRule(PhysicalProjectRule.INSTANCE);
     volcanoPlanner.addRule(PhysicalFilterRule.INSTANCE);
-    volcanoPlanner.setRoot(volcanoPlanner.changeTraits(rel,
-        rel.getTraitSet().replace(PhysicalConvention.INSTANCE)));
+    volcanoPlanner.addRule(PhysicalFilterScanRule.INSTANCE);
+    volcanoPlanner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
+    volcanoPlanner.addRule(CoreRules.FILTER_AGGREGATE_TRANSPOSE);
+    volcanoPlanner.addRule(CoreRules.FILTER_SET_OP_TRANSPOSE);
+
+    RelTraitSet physicalTraits = rel.getTraitSet().replace(PhysicalConvention.INSTANCE);
+    if (!rel.getTraitSet().equals(physicalTraits)) {
+      rel = volcanoPlanner.changeTraits(rel, physicalTraits);
+    }
+
+    volcanoPlanner.setRoot(rel);
     rel = volcanoPlanner.findBestExp();
 
     return root.withRel(rel);

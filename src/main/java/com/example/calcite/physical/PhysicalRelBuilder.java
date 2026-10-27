@@ -43,7 +43,23 @@ public class PhysicalRelBuilder extends RelBuilder {
     RelOptSchema schema = requireNonNull(relOptSchema, "relOptSchema");
     RelOptTable table = requireNonNull(schema.getTableForMember(List.of(tableNames)),
         () -> "Table " + String.join(".", tableNames) + " not found");
-    push(new PhysicalTableScan(getCluster(), physicalTraits(), List.of(), table));
+    push(new PhysicalTableScan(getCluster(), physicalTraits(), List.of(), table, null));
+    return this;
+  }
+
+  /** Adds filter condition to physical table scan on top of stack. */
+  public PhysicalRelBuilder withFilter(RexNode condition) {
+    RelNode top = build();
+    if (!(top instanceof PhysicalTableScan scan)) {
+      throw new IllegalStateException("Physical table scan expected on top of stack, got " + top);
+    }
+
+    if (scan.getFilter() != null) {
+      throw new IllegalStateException("Physical table scan already has filter: " + scan);
+    }
+
+    push(new PhysicalTableScan(scan.getCluster(), scan.getTraitSet(), scan.getHints(),
+        scan.getTable(), condition));
     return this;
   }
 

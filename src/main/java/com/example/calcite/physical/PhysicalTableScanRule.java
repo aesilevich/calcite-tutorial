@@ -23,6 +23,6 @@ public class PhysicalTableScanRule extends ConverterRule {
     LogicalTableScan scan = (LogicalTableScan) rel;
     return new PhysicalTableScan(scan.getCluster(),
         scan.getTraitSet().replace(PhysicalConvention.INSTANCE), scan.getHints(),
-        scan.getTable());
+        scan.getTable(), null);
   }
 }
