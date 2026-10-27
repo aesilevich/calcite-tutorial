@@ -113,6 +113,14 @@ public class CalciteTutorialDatabase {
             CoreRules.JOIN_REDUCE_EXPRESSIONS,
             CoreRules.CALC_REDUCE_EXPRESSIONS,
             CoreRules.WINDOW_REDUCE_EXPRESSIONS))
+        .addRuleCollection(List.of(
+            CoreRules.FILTER_PROJECT_TRANSPOSE,
+            CoreRules.FILTER_INTO_JOIN,
+            CoreRules.JOIN_CONDITION_PUSH,
+            CoreRules.FILTER_AGGREGATE_TRANSPOSE,
+            CoreRules.FILTER_SET_OP_TRANSPOSE,
+            CoreRules.FILTER_MERGE,
+            CoreRules.JOIN_PUSH_EXPRESSIONS))
         .build();
     HepPlanner hepPlanner = new HepPlanner(program);
     hepPlanner.setRoot(root.rel);
