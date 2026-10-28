@@ -1,11 +1,16 @@
 package com.example.calcite;
 
 import com.example.calcite.parser.impl.SqlParserImpl;
+import com.example.calcite.physical.PhysicalCalc;
 import com.example.calcite.physical.PhysicalConvention;
+import com.example.calcite.physical.PhysicalFilter;
 import com.example.calcite.physical.PhysicalFilterRule;
 import com.example.calcite.physical.PhysicalFilterScanRule;
+import com.example.calcite.physical.PhysicalFilterToCalcRule;
+import com.example.calcite.physical.PhysicalProject;
 import com.example.calcite.physical.PhysicalProjectRule;
 import com.example.calcite.physical.PhysicalProjectScanRule;
+import com.example.calcite.physical.PhysicalProjectToCalcRule;
 import com.example.calcite.physical.PhysicalRelBuilder;
 import com.example.calcite.physical.PhysicalTableScanRule;
 import com.example.calcite.schema.JsonSchema;
@@ -34,6 +39,8 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.rules.CoreRules;
+import org.apache.calcite.rel.rules.FilterCalcMergeRule;
+import org.apache.calcite.rel.rules.ProjectCalcMergeRule;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.impl.AbstractSchema;
@@ -208,12 +215,31 @@ public class CalciteTutorialDatabase {
     return root.withRel(rel);
   }
 
+  /* Converts physical projects and filters to physical calcs with HEP planner. */
+  public RelRoot convertToCalc(RelRoot root) {
+    HepProgram program = HepProgram.builder()
+        .addRuleCollection(List.of(
+            PhysicalProjectToCalcRule.INSTANCE,
+            PhysicalFilterToCalcRule.INSTANCE,
+            CoreRules.CALC_MERGE,
+            FilterCalcMergeRule.Config.DEFAULT
+                .withOperandFor(PhysicalFilter.class, PhysicalCalc.class)
+                .toRule(),
+            ProjectCalcMergeRule.Config.DEFAULT
+                .withOperandFor(PhysicalProject.class, PhysicalCalc.class)
+                .toRule()))
+        .build();
+    HepPlanner hepPlanner = new HepPlanner(program);
+    hepPlanner.setRoot(root.rel);
+    return root.withRel(hepPlanner.findBestExp());
+  }
+
   /*
    * Parses and validates query, converts it to relational tree and then performs
    * all optimization on logical and physical level.
    */
   public RelRoot processQuery(String query) throws SqlParseException {
-    return optimizeQueryPhysical(processQueryLogical(query));
+    return convertToCalc(optimizeQueryPhysical(processQueryLogical(query)));
   }
 
   /* Creates query planner */
