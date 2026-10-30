@@ -16,6 +16,7 @@ import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
 import org.apache.calcite.tools.RelBuilder;
 import org.apache.calcite.tools.RelBuilderFactory;
+import org.apache.calcite.util.ImmutableIntList;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -43,7 +44,7 @@ public class PhysicalRelBuilder extends RelBuilder {
     RelOptSchema schema = requireNonNull(relOptSchema, "relOptSchema");
     RelOptTable table = requireNonNull(schema.getTableForMember(List.of(tableNames)),
         () -> "Table " + String.join(".", tableNames) + " not found");
-    push(new PhysicalTableScan(getCluster(), physicalTraits(), List.of(), table, null));
+    push(new PhysicalTableScan(getCluster(), physicalTraits(), List.of(), table, null, null));
     return this;
   }
 
@@ -59,7 +60,31 @@ public class PhysicalRelBuilder extends RelBuilder {
     }
 
     push(new PhysicalTableScan(scan.getCluster(), scan.getTraitSet(), scan.getHints(),
-        scan.getTable(), condition));
+        scan.getTable(), condition, scan.getProjection()));
+    return this;
+  }
+
+  /** Adds projection property to physical table scan on top of stack. */
+  public PhysicalRelBuilder withProjection(RexNode... fields) {
+    RelNode top = build();
+    if (!(top instanceof PhysicalTableScan scan)) {
+      throw new IllegalStateException("Physical table scan expected on top of stack, got " + top);
+    }
+
+    if (scan.getProjection() != null) {
+      throw new IllegalStateException("Physical table scan already has projection: " + scan);
+    }
+
+    List<Integer> projection = new ArrayList<>();
+    for (RexNode field : fields) {
+      if (!(field instanceof RexInputRef ref)) {
+        throw new IllegalArgumentException("Field reference expected, got " + field);
+      }
+      projection.add(ref.getIndex());
+    }
+
+    push(new PhysicalTableScan(scan.getCluster(), scan.getTraitSet(), scan.getHints(),
+        scan.getTable(), scan.getFilter(), ImmutableIntList.copyOf(projection)));
     return this;
   }
 
