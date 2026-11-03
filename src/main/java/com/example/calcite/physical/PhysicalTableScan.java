@@ -3,6 +3,8 @@ package com.example.calcite.physical;
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
+import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
@@ -67,6 +69,20 @@ public class PhysicalTableScan extends TableScan implements PhysicalNode {
 
     Double selectivity = mq.getSelectivity(this, filter);
     return selectivity == null ? rowCount : rowCount * selectivity;
+  }
+
+  /** Calculates cost of scan taking into account number of columns in projection. */
+  @Override public @Nullable RelOptCost computeSelfCost(RelOptPlanner planner,
+      RelMetadataQuery mq) {
+    // calculating base cost using default implementation
+    RelOptCost cost = super.computeSelfCost(planner, mq);
+    if (cost == null || projection == null) {
+      return cost;
+    }
+
+    // adjusting cost proportionally to number of projection columns
+    int columnCount = table.getRowType().getFieldCount();
+    return cost.multiplyBy(((double) Math.max(projection.size(), 1)) / columnCount);
   }
 
   @Override public RelWriter explainTerms(RelWriter pw) {
