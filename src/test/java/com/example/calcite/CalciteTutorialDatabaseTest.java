@@ -267,7 +267,7 @@ class CalciteTutorialDatabaseTest {
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(rel, SqlKind.SELECT));
     assertThat(RelOptUtil.toString(root.rel),
         is("PhysicalTableScan(table=[[tutorial, users]], "
-            + "filter=[AND(>($0, 10), >($2, 1))])\n"));
+            + "filter=[AND(>($2, 1), >($0, 10))])\n"));
   }
 
   /** Tests pushing of multiple filters into physical table scan as single filter */
@@ -282,7 +282,7 @@ class CalciteTutorialDatabaseTest {
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(rel, SqlKind.SELECT));
     assertThat(RelOptUtil.toString(root.rel),
         is("PhysicalTableScan(table=[[tutorial, users]], "
-            + "filter=[AND(>($0, 10), >($2, 1))])\n"));
+            + "filter=[AND(>($2, 1), >($0, 10))])\n"));
   }
 
   /** Tests building physical table scan with builder */
@@ -551,12 +551,42 @@ class CalciteTutorialDatabaseTest {
     RelNode expected = builder
         .physicalScan("tutorial", "users")
             .withFilter(builder.and(
-                builder.greaterThan(builder.field("id"), builder.literal(10)),
-                builder.greaterThan(builder.field("dep_id"), builder.literal(1))))
+                builder.greaterThan(builder.field("dep_id"), builder.literal(1)),
+                builder.greaterThan(builder.field("id"), builder.literal(10))))
         .build();
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
     assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests pushing two logical filters + project into scan */
+  @Test void testPushTwoLogicalFiltersAndPorjectIntoScan() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    RelNode original = builder
+        .scan("tutorial", "users")
+        .project(builder.field("dep_id"), builder.field("id"))
+        .filter(builder.greaterThan(builder.field("dep_id"), builder.literal(1)))
+        .filter(builder.greaterThan(builder.field("id"), builder.literal(2)))
+        .build();
+    RelNode expected = builder
+        .physicalScan("tutorial", "users")
+            .withFilter(builder.and(
+                builder.greaterThan(builder.field("id"), builder.literal(2)),
+                builder.greaterThan(builder.field("dep_id"), builder.literal(1))))
+            .withProjection(builder.field("dep_id"), builder.field("id"))
+        .build();
+
+    assertThat(RelOptUtil.toString(original),
+        is("LogicalFilter(condition=[>($1, 2)])\n"
+            + "  LogicalFilter(condition=[>($0, 1)])\n"
+            + "    LogicalProject(dep_id=[$2], id=[$0])\n"
+            + "      LogicalTableScan(table=[[tutorial, users]])\n"));
+
+    RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalTableScan(table=[[tutorial, users]], filter=[AND(>($0, 2), >($2, 1))], "
+            + "projection=[[2, 0]])\n"));
   }
 
   /** Tests pushing physical filter condition into physical scan with projection */
