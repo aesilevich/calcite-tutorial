@@ -559,6 +559,24 @@ class CalciteTutorialDatabaseTest {
     assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
   }
 
+  /** Tests pushing physical filter condition into physical scan with projection */
+  @Test void testPushPhysicalFilterIntoPhysicalScanWithProjection() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    RelNode original = builder
+        .physicalScan("tutorial", "users")
+            .withProjection(builder.field("name"), builder.field("dep_id"))
+        .physicalFilter(builder.greaterThan(builder.field("dep_id"), builder.literal(1)))
+        .build();
+    RelNode expected = builder
+        .physicalScan("tutorial", "users")
+            .withFilter(builder.greaterThan(builder.field("dep_id"), builder.literal(1)))
+            .withProjection(builder.field("name"), builder.field("dep_id"))
+        .build();
+
+    RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
+  }
+
   /**
    * Tests pushing logical filter condition into physical scan through logical project
    */
