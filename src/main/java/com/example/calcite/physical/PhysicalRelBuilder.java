@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.calcite.plan.Context;
+import org.apache.calcite.plan.Contexts;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptSchema;
 import org.apache.calcite.plan.RelOptTable;
@@ -36,7 +37,8 @@ public class PhysicalRelBuilder extends RelBuilder {
   /** Creates physical relational builder with specified cluster and schema. */
   public static PhysicalRelBuilder create(RelOptCluster cluster,
       @Nullable RelOptSchema relOptSchema) {
-    return new PhysicalRelBuilder(null, cluster, relOptSchema);
+    return new PhysicalRelBuilder(Contexts.of(Config.DEFAULT.withBloat(-1)), cluster,
+        relOptSchema);
   }
 
   /** Creates physical table scan for table with specified name and pushes it to stack. */
