@@ -35,7 +35,7 @@ public class PhysicalFilterScanRule extends RelRule<PhysicalFilterScanRule.Confi
     // combining existing scan filter with filter condition
     if (scan.getFilter() != null) {
       condition = RexUtil.composeConjunction(scan.getCluster().getRexBuilder(),
-          List.of(scan.getFilter(), condition));
+          List.of(condition, scan.getFilter()));
     }
 
     call.transformTo(new PhysicalTableScan(scan.getCluster(), scan.getTraitSet(),
