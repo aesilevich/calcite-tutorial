@@ -739,4 +739,29 @@ class CalciteTutorialDatabaseTest {
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
     assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(original)));
   }
+
+  /** Tests pushing logical filter and two logical projects into physical scan */
+  @Test void testPushLogicalFilterAndTwoLogicalProjectsIntoScan() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    builder
+        .scan("tutorial", "users")
+        .project(builder.call(SqlStdOperatorTable.PLUS, builder.field("id"),
+                builder.field("dep_id")),
+            builder.field("name"));
+    builder.filter(builder.equals(builder.field("name"), builder.literal("x")));
+    RelNode original = builder
+        .project(builder.field(0))
+        .build();
+
+    RelNode expected = builder
+        .physicalScan("tutorial", "users")
+            .withFilter(builder.equals(builder.field("name"), builder.literal("x")))
+            .withProjection(builder.field("id"), builder.field("dep_id"))
+        .physicalProject(builder.call(SqlStdOperatorTable.PLUS, builder.field("id"),
+            builder.field("dep_id")))
+        .build();
+
+    RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
+  }
 }
