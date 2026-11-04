@@ -193,6 +193,7 @@ public class CalciteTutorialDatabase {
     volcanoPlanner.addRule(PhysicalFilterScanRule.INSTANCE);
     volcanoPlanner.addRule(PhysicalProjectScanRule.INSTANCE);
     volcanoPlanner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
+    volcanoPlanner.addRule(CoreRules.PROJECT_MERGE);
     volcanoPlanner.addRule(CoreRules.FILTER_AGGREGATE_TRANSPOSE);
     volcanoPlanner.addRule(CoreRules.FILTER_SET_OP_TRANSPOSE);
 
