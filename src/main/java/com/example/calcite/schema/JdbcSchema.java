@@ -119,7 +119,7 @@ public class JdbcSchema {
       }
     }
 
-    return new SchemaTable(columns, getRowCount(connection, schemaName, tableName));
+    return new SchemaTable(columns, getRowCount(connection, schemaName, tableName), List.of());
   }
 
   /** Escapes '_' and '%' characters in name. */

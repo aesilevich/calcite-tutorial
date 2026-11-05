@@ -7,10 +7,13 @@ import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.core.JoinRelType;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.example.calcite.metadata.TutorialRelMetadataQuery;
+import com.example.calcite.schema.JsonSchema;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -85,5 +88,31 @@ class CalciteTutorialDatabaseTest {
     List<String> users = List.of("tutorial", "users");
     List<String> departments = List.of("tutorial", "departments");
     assertThat(mq.getUsedTables(filter), is(Set.of(departments, users)));
+  }
+
+  /** Tests that unique keys of table from JSON schema are propagated to metadata */
+  @Test void testUniqueKeysPropagatedToMetadata() throws Exception {
+    CalciteTutorialDatabase db = new CalciteTutorialDatabase(JsonSchema.parse("""
+        {"tables": [{"name": "t", "keys": [["a"], ["b", "c"]], "columns": [
+          {"name": "a", "type": "integer", "nullable": false},
+          {"name": "b", "type": "integer", "nullable": false},
+          {"name": "c", "type": "integer", "nullable": false}
+        ]}]}
+        """));
+
+    com.example.calcite.logical.RelBuilder builder = db.createRelBuilder();
+    RelNode scan = builder.scan("tutorial", "t").peek();
+    RelNode project = builder
+        .project(builder.field("c"), builder.field("a"))
+        .build();
+
+    RelMetadataQuery mq = scan.getCluster().getMetadataQuery();
+    assertThat(mq.areColumnsUnique(scan, ImmutableBitSet.of(0)), is(true));
+    assertThat(mq.areColumnsUnique(scan, ImmutableBitSet.of(0, 1)), is(true));
+    assertThat(mq.areColumnsUnique(scan, ImmutableBitSet.of(1)), is(false));
+    assertThat(mq.areColumnsUnique(scan, ImmutableBitSet.of(1, 2)), is(true));
+
+    assertThat(mq.areColumnsUnique(project, ImmutableBitSet.of(1)), is(true));
+    assertThat(mq.areColumnsUnique(project, ImmutableBitSet.of(0)), is(false));
   }
 }

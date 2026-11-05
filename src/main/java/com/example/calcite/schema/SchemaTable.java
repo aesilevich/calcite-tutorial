@@ -8,6 +8,7 @@ import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.Statistics;
 import org.apache.calcite.schema.impl.AbstractTable;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** Custom table schema */
@@ -18,15 +19,20 @@ public class SchemaTable extends AbstractTable {
   /** Number of rows in table or null if unknown */
   private final @Nullable Double rowCount;
 
-  /** Creates table schema from list of columns and number of rows */
-  public SchemaTable(List<Column> columns, @Nullable Double rowCount) {
+  /** Unique keys, each key is set of column indexes */
+  private final List<ImmutableBitSet> keys;
+
+  /** Creates table schema from list of columns, number of rows and unique keys */
+  public SchemaTable(List<Column> columns, @Nullable Double rowCount,
+      List<ImmutableBitSet> keys) {
     this.columns = columns;
     this.rowCount = rowCount;
+    this.keys = keys;
   }
 
   /** Returns table statistics */
   @Override public Statistic getStatistic() {
-    return rowCount == null ? Statistics.UNKNOWN : Statistics.of(rowCount, null);
+    return Statistics.of(rowCount, keys, null, null);
   }
 
   /** Returns type of row for table */
