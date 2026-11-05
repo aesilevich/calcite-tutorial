@@ -1,5 +1,8 @@
 package com.example.calcite;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
 import java.util.List;
 import java.util.Set;
 
@@ -114,5 +117,32 @@ class CalciteTutorialDatabaseTest {
 
     assertThat(mq.areColumnsUnique(project, ImmutableBitSet.of(1)), is(true));
     assertThat(mq.areColumnsUnique(project, ImmutableBitSet.of(0)), is(false));
+  }
+
+  /** Tests that unique keys of table from custom JDBC schema are propagated to metadata */
+  @Test void testJdbcUniqueKeysPropagatedToMetadata() throws Exception {
+    try (Connection connection = DriverManager.getConnection("jdbc:hsqldb:mem:unique", "SA", "");
+        Statement statement = connection.createStatement()) {
+      statement.execute("create table \"t\" (\"a\" integer not null, \"b\" integer not null, "
+          + "\"c\" integer not null, primary key (\"a\"), unique (\"b\", \"c\"))");
+
+      CalciteTutorialDatabase db = new CalciteTutorialDatabase(
+          com.example.calcite.schema.JdbcSchema.readCatalog(connection).getSchema("PUBLIC"));
+
+      com.example.calcite.logical.RelBuilder builder = db.createRelBuilder();
+      RelNode scan = builder.scan("tutorial", "t").peek();
+      RelNode project = builder
+          .project(builder.field("c"), builder.field("a"))
+          .build();
+
+      RelMetadataQuery mq = scan.getCluster().getMetadataQuery();
+      assertThat(mq.areColumnsUnique(scan, ImmutableBitSet.of(0)), is(true));
+      assertThat(mq.areColumnsUnique(scan, ImmutableBitSet.of(0, 1)), is(true));
+      assertThat(mq.areColumnsUnique(scan, ImmutableBitSet.of(1)), is(false));
+      assertThat(mq.areColumnsUnique(scan, ImmutableBitSet.of(1, 2)), is(true));
+
+      assertThat(mq.areColumnsUnique(project, ImmutableBitSet.of(1)), is(true));
+      assertThat(mq.areColumnsUnique(project, ImmutableBitSet.of(0)), is(false));
+    }
   }
 }
