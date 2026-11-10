@@ -24,6 +24,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionProperty;
@@ -32,8 +33,15 @@ import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.adapter.enumerable.EnumerableCalc;
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.adapter.enumerable.EnumerableFilter;
+import org.apache.calcite.adapter.enumerable.EnumerableInterpretable;
 import org.apache.calcite.adapter.enumerable.EnumerableProject;
+import org.apache.calcite.adapter.enumerable.EnumerableRel;
 import org.apache.calcite.adapter.enumerable.EnumerableRules;
+import org.apache.calcite.adapter.java.JavaTypeFactory;
+import org.apache.calcite.DataContext;
+import org.apache.calcite.linq4j.Enumerable;
+import org.apache.calcite.linq4j.QueryProvider;
+import org.apache.calcite.runtime.Bindable;
 import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
@@ -43,6 +51,7 @@ import org.apache.calcite.plan.hep.HepPlanner;
 import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
+import org.apache.calcite.rel.RelCollationTraitDef;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
 import org.apache.calcite.rel.core.RelFactories;
@@ -51,7 +60,8 @@ import org.apache.calcite.rel.rules.FilterCalcMergeRule;
 import org.apache.calcite.rel.rules.ProjectCalcMergeRule;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
-import org.apache.calcite.schema.impl.AbstractSchema;
+import org.apache.calcite.schema.Schema;
+import org.apache.calcite.schema.SchemaPlus;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlOperatorTable;
 import org.apache.calcite.sql.parser.SqlParseException;
@@ -79,7 +89,7 @@ public class CalciteTutorialDatabase {
   private CalciteSchema rootSchema;
 
   /* Database schema */
-  private AbstractSchema schema;
+  private Schema schema;
 
   /* Catalog reader */
   private CalciteCatalogReader catalogReader;
@@ -93,7 +103,7 @@ public class CalciteTutorialDatabase {
   }
 
   /* Initializes all parts of database for processing queries with specified schema */
-  public CalciteTutorialDatabase(AbstractSchema schema) {
+  public CalciteTutorialDatabase(Schema schema) {
     // creating type factory
     typeFactory = new JavaTypeFactoryImpl();
 
@@ -116,7 +126,7 @@ public class CalciteTutorialDatabase {
   }
 
   /* Returns database schema */
-  public AbstractSchema getSchema() {
+  public Schema getSchema() {
     return schema;
   }
 
@@ -304,10 +314,37 @@ public class CalciteTutorialDatabase {
     return convertToCalc(optimizeQueryVolcano(processQueryLogical(query), convention));
   }
 
+  /* Executes optimized query and returns enumerable with result rows. */
+  public Enumerable<?> executeQuery(RelRoot root) {
+    Bindable<?> bindable = EnumerableInterpretable.toBindable(Map.of(), null,
+        (EnumerableRel) root.rel, EnumerableRel.Prefer.ARRAY);
+
+    DataContext context = new DataContext() {
+      @Override public SchemaPlus getRootSchema() {
+        return rootSchema.plus();
+      }
+
+      @Override public JavaTypeFactory getTypeFactory() {
+        return (JavaTypeFactory) typeFactory;
+      }
+
+      @Override public QueryProvider getQueryProvider() {
+        return null;
+      }
+
+      @Override public Object get(String name) {
+        return null;
+      }
+    };
+
+    return bindable.bind(context);
+  }
+
   /* Creates query planner */
   private VolcanoPlanner createPlanner() {
     VolcanoPlanner planner = new VolcanoPlanner();
     planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+    planner.addRelTraitDef(RelCollationTraitDef.INSTANCE);
     planner.setExecutor(new RexExecutor());
     return planner;
   }
