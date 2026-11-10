@@ -3,6 +3,9 @@ package com.example.calcite.physical;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.calcite.adapter.enumerable.EnumerableConvention;
+import org.apache.calcite.adapter.enumerable.EnumerableFilter;
+import org.apache.calcite.adapter.enumerable.EnumerableProject;
 import org.apache.calcite.plan.Context;
 import org.apache.calcite.plan.Contexts;
 import org.apache.calcite.plan.RelOptCluster;
@@ -43,10 +46,8 @@ public class PhysicalRelBuilder extends RelBuilder {
 
   /** Creates physical table scan for table with specified name and pushes it to stack. */
   public PhysicalRelBuilder physicalScan(String... tableNames) {
-    RelOptSchema schema = requireNonNull(relOptSchema, "relOptSchema");
-    RelOptTable table = requireNonNull(schema.getTableForMember(List.of(tableNames)),
-        () -> "Table " + String.join(".", tableNames) + " not found");
-    push(new PhysicalTableScan(getCluster(), physicalTraits(), List.of(), table, null, null));
+    push(new PhysicalTableScan(getCluster(), physicalTraits(), List.of(), getTable(tableNames),
+        null, null));
     return this;
   }
 
@@ -97,10 +98,44 @@ public class PhysicalRelBuilder extends RelBuilder {
     return this;
   }
 
+  /** Creates enumerable filter with specified condition on top of stack. */
+  public PhysicalRelBuilder enumerableFilter(RexNode condition) {
+    push(EnumerableFilter.create(build(), condition));
+    return this;
+  }
+
   /** Creates physical project with specified expressions on top of stack. */
   public PhysicalRelBuilder physicalProject(RexNode... nodes) {
     RelNode input = build();
+    push(new PhysicalProject(getCluster(), physicalTraits(), List.of(), input, List.of(nodes),
+        projectRowType(input, nodes)));
+    return this;
+  }
 
+  /** Creates enumerable project with specified expressions on top of stack. */
+  public PhysicalRelBuilder enumerableProject(RexNode... nodes) {
+    RelNode input = build();
+    push(EnumerableProject.create(input, List.of(nodes), projectRowType(input, nodes)));
+    return this;
+  }
+
+  /** Creates converter from physical to enumerable convention on top of stack. */
+  public PhysicalRelBuilder physicalToEnumerable() {
+    RelNode input = build();
+    push(new PhysicalToEnumerableConverter(getCluster(),
+        input.getTraitSet().replace(EnumerableConvention.INSTANCE), input));
+    return this;
+  }
+
+  /** Returns table with specified name, throws exception if table is not found. */
+  private RelOptTable getTable(String... tableNames) {
+    RelOptSchema schema = requireNonNull(relOptSchema, "relOptSchema");
+    return requireNonNull(schema.getTableForMember(List.of(tableNames)),
+        () -> "Table " + String.join(".", tableNames) + " not found");
+  }
+
+  /** Returns row type of project with specified expressions on top of specified input. */
+  private RelDataType projectRowType(RelNode input, RexNode... nodes) {
     // using input field names for column references, like project does
     List<@Nullable String> fieldNames = new ArrayList<>();
     for (RexNode node : nodes) {
@@ -109,11 +144,8 @@ public class PhysicalRelBuilder extends RelBuilder {
           : null);
     }
 
-    RelDataType rowType = RexUtil.createStructType(getCluster().getTypeFactory(),
-        List.of(nodes), fieldNames, SqlValidatorUtil.F_SUGGESTER);
-    push(new PhysicalProject(getCluster(), physicalTraits(), List.of(), input, List.of(nodes),
-        rowType));
-    return this;
+    return RexUtil.createStructType(getCluster().getTypeFactory(), List.of(nodes), fieldNames,
+        SqlValidatorUtil.F_SUGGESTER);
   }
 
   /** Returns trait set of physical nodes. */

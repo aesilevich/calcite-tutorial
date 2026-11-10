@@ -48,7 +48,7 @@ public class CalciteTutorial {
 
     // converting query to relation tree
     String sql = "select name from public.users where id > 10";
-    RelRoot root = db.processQuery(sql);
+    RelRoot root = db.processQueryPhysical(sql);
 
     // dumping relational tree to stdout
     System.out.println(RelOptUtil.toString(root.rel));

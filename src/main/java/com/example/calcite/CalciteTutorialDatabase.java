@@ -14,6 +14,7 @@ import com.example.calcite.physical.PhysicalProjectRule;
 import com.example.calcite.physical.PhysicalProjectToCalcRule;
 import com.example.calcite.physical.PhysicalRelBuilder;
 import com.example.calcite.physical.PhysicalTableScanRule;
+import com.example.calcite.physical.PhysicalToEnumerableConverterRule;
 import com.example.calcite.schema.JsonSchema;
 import com.example.calcite.sql.UnsupportedOperationValidator;
 import com.example.calcite.sql.OperatorTable;
@@ -28,6 +29,12 @@ import org.apache.calcite.config.CalciteConnectionConfig;
 import org.apache.calcite.config.CalciteConnectionProperty;
 import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
+import org.apache.calcite.adapter.enumerable.EnumerableCalc;
+import org.apache.calcite.adapter.enumerable.EnumerableConvention;
+import org.apache.calcite.adapter.enumerable.EnumerableFilter;
+import org.apache.calcite.adapter.enumerable.EnumerableProject;
+import org.apache.calcite.adapter.enumerable.EnumerableRules;
+import org.apache.calcite.plan.Convention;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptPlanner;
@@ -196,24 +203,47 @@ public class CalciteTutorialDatabase {
    * and optimizes it.
    */
   public RelRoot optimizeQueryPhysical(RelRoot root) {
+    return optimizeQueryVolcano(root, PhysicalConvention.INSTANCE);
+  }
+
+  /*
+   * Converts logical relational tree to enumerable relation tree with Volcano planner
+   * and optimizes it.
+   */
+  public RelRoot optimizeQueryEnumerable(RelRoot root) {
+    return optimizeQueryVolcano(root, EnumerableConvention.INSTANCE);
+  }
+
+  /*
+   * Converts logical relational tree to physical representation with Volcano planner
+   * using specified convention for root node.
+   */
+  public RelRoot optimizeQueryVolcano(RelRoot root, Convention convention) {
     RelNode rel = root.rel;
 
     // converting logical nodes to physical nodes with Volcano planner
     RelOptPlanner volcanoPlanner = rel.getCluster().getPlanner();
+    EnumerableRules.ENUMERABLE_RULES.forEach(volcanoPlanner::addRule);
     volcanoPlanner.addRule(LogicalTableScanWithFilterAndProjectRule.INSTANCE);
     volcanoPlanner.addRule(LogicalFilterToScanRule.INSTANCE);
     volcanoPlanner.addRule(LogicalProjectToScanRule.INSTANCE);
     volcanoPlanner.addRule(PhysicalTableScanRule.INSTANCE);
-    volcanoPlanner.addRule(PhysicalProjectRule.INSTANCE);
-    volcanoPlanner.addRule(PhysicalFilterRule.INSTANCE);
+
+    // we want generate physical project and filter nodes only
+    // if requested convention is physical
+    if (convention == PhysicalConvention.INSTANCE) {
+      volcanoPlanner.addRule(PhysicalProjectRule.INSTANCE);
+      volcanoPlanner.addRule(PhysicalFilterRule.INSTANCE);
+    }
+    volcanoPlanner.addRule(PhysicalToEnumerableConverterRule.INSTANCE);
     volcanoPlanner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
     volcanoPlanner.addRule(CoreRules.PROJECT_MERGE);
     volcanoPlanner.addRule(CoreRules.FILTER_AGGREGATE_TRANSPOSE);
     volcanoPlanner.addRule(CoreRules.FILTER_SET_OP_TRANSPOSE);
 
-    RelTraitSet physicalTraits = rel.getTraitSet().replace(PhysicalConvention.INSTANCE);
-    if (!rel.getTraitSet().equals(physicalTraits)) {
-      rel = volcanoPlanner.changeTraits(rel, physicalTraits);
+    RelTraitSet traits = rel.getTraitSet().replace(convention);
+    if (!rel.getTraitSet().equals(traits)) {
+      rel = volcanoPlanner.changeTraits(rel, traits);
     }
 
     volcanoPlanner.setRoot(rel);
@@ -234,6 +264,14 @@ public class CalciteTutorialDatabase {
                 .toRule(),
             ProjectCalcMergeRule.Config.DEFAULT
                 .withOperandFor(PhysicalProject.class, PhysicalCalc.class)
+                .toRule(),
+            EnumerableRules.ENUMERABLE_PROJECT_TO_CALC_RULE,
+            EnumerableRules.ENUMERABLE_FILTER_TO_CALC_RULE,
+            FilterCalcMergeRule.Config.DEFAULT
+                .withOperandFor(EnumerableFilter.class, EnumerableCalc.class)
+                .toRule(),
+            ProjectCalcMergeRule.Config.DEFAULT
+                .withOperandFor(EnumerableProject.class, EnumerableCalc.class)
                 .toRule()))
         .build();
     HepPlanner hepPlanner = new HepPlanner(program);
@@ -243,10 +281,27 @@ public class CalciteTutorialDatabase {
 
   /*
    * Parses and validates query, converts it to relational tree and then performs
-   * all optimization on logical and physical level.
+   * all optimization on logical and physical level making final tree with
+   * root node with physical convention.
    */
-  public RelRoot processQuery(String query) throws SqlParseException {
-    return convertToCalc(optimizeQueryPhysical(processQueryLogical(query)));
+  public RelRoot processQueryPhysical(String query) throws SqlParseException {
+    return processQuery(query, PhysicalConvention.INSTANCE);
+  }
+
+  /*
+   * Parses and validates query, converts it to relational tree and then performs
+   * all optimization on logical and physical level making final tree with
+   * root node with enumerable convention.
+   */
+  public RelRoot processQueryEnumerable(String query) throws SqlParseException {
+    return processQuery(query, EnumerableConvention.INSTANCE);
+  }
+
+  /*
+   * Parses and validates query, optimizes it and converts to final physical representation.
+   */
+  public RelRoot processQuery(String query, Convention convention) throws SqlParseException {
+    return convertToCalc(optimizeQueryVolcano(processQueryLogical(query), convention));
   }
 
   /* Creates query planner */

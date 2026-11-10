@@ -1,5 +1,6 @@
 package com.example.calcite.physical;
 
+import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.RelNode;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +53,61 @@ class PhysicalRelBuilderTest {
     assertThat(RelOptUtil.toString(rel),
         is("PhysicalFilter(condition=[>($0, 10)])\n"
             + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests building enumerable project with builder */
+  @Test void testBuildEnumerableProject() {
+    PhysicalRelBuilder builder = database.createPhysicalRelBuilder();
+    RelNode rel = builder
+        .physicalScan("tutorial", "users")
+        .enumerableProject(builder.field("dep_id"), builder.field("name"))
+        .build();
+
+    assertThat(RelOptUtil.toString(rel),
+        is("EnumerableProject(dep_id=[$2], name=[$1])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests building enumerable filter with builder */
+  @Test void testBuildEnumerableFilter() {
+    PhysicalRelBuilder builder = database.createPhysicalRelBuilder();
+    RelNode rel = builder
+        .physicalScan("tutorial", "users")
+        .enumerableFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
+        .build();
+
+    assertThat(RelOptUtil.toString(rel),
+        is("EnumerableFilter(condition=[>($0, 10)])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests building converter from physical to enumerable convention with builder */
+  @Test void testBuildPhysicalToEnumerable() {
+    RelNode rel = database.createPhysicalRelBuilder()
+        .physicalScan("tutorial", "users")
+        .physicalToEnumerable()
+        .build();
+
+    assertThat(RelOptUtil.toString(rel),
+        is("PhysicalToEnumerableConverter\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+    assertThat(rel.getConvention(), is(EnumerableConvention.INSTANCE));
+    assertThat(rel.getInput(0).getConvention(), is(PhysicalConvention.INSTANCE));
+  }
+
+  /** Tests building enumerable project on top of converter with builder */
+  @Test void testBuildEnumerableProjectWithPhysicalToEnumerable() {
+    PhysicalRelBuilder builder = database.createPhysicalRelBuilder();
+    RelNode rel = builder
+        .physicalScan("tutorial", "users")
+        .physicalToEnumerable()
+        .enumerableProject(builder.field("dep_id"), builder.field("name"))
+        .build();
+
+    assertThat(RelOptUtil.toString(rel),
+        is("EnumerableProject(dep_id=[$2], name=[$1])\n"
+            + "  PhysicalToEnumerableConverter\n"
+            + "    PhysicalTableScan(table=[[tutorial, users]])\n"));
   }
 
   /** Tests building logical project with physical table scan with builder */
