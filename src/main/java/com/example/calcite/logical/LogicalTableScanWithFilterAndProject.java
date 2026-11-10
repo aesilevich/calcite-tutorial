@@ -1,0 +1,94 @@
+package com.example.calcite.logical;
+
+import java.util.List;
+
+import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.plan.RelOptCost;
+import org.apache.calcite.plan.RelOptPlanner;
+import org.apache.calcite.plan.RelOptTable;
+import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.RelWriter;
+import org.apache.calcite.rel.core.TableScan;
+import org.apache.calcite.rel.hint.RelHint;
+import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.util.ImmutableIntList;
+import org.checkerframework.checker.nullness.qual.Nullable;
+
+/** Logical node for table scan with filter and projection. */
+public class LogicalTableScanWithFilterAndProject extends TableScan {
+  /** Filtering condition for scan, refers to table columns. */
+  private final @Nullable RexNode filter;
+
+  /** Indexes of table columns returned by scan. */
+  private final @Nullable ImmutableIntList projection;
+
+  public LogicalTableScanWithFilterAndProject(RelOptCluster cluster, RelTraitSet traitSet,
+      List<RelHint> hints, RelOptTable table, @Nullable RexNode filter,
+      @Nullable ImmutableIntList projection) {
+    super(cluster, traitSet, hints, table);
+    this.filter = filter;
+    this.projection = projection;
+  }
+
+  /** Returns filter condition for scan, or null if there is no filter. */
+  public @Nullable RexNode getFilter() {
+    return filter;
+  }
+
+  /** Returns indexes of table columns returned by scan, or null if there is no projection. */
+  public @Nullable ImmutableIntList getProjection() {
+    return projection;
+  }
+
+  @Override public RelNode copy(RelTraitSet traitSet, List<RelNode> inputs) {
+    return new LogicalTableScanWithFilterAndProject(getCluster(), traitSet, getHints(), table,
+        filter, projection);
+  }
+
+  @Override public RelDataType deriveRowType() {
+    RelDataType tableRowType = table.getRowType();
+    if (projection == null) {
+      return tableRowType;
+    }
+
+    RelDataTypeFactory.Builder builder = getCluster().getTypeFactory().builder();
+    for (int index : projection) {
+      builder.add(tableRowType.getFieldList().get(index));
+    }
+    return builder.build();
+  }
+
+  @Override public double estimateRowCount(RelMetadataQuery mq) {
+    double rowCount = super.estimateRowCount(mq);
+    if (filter == null) {
+      return rowCount;
+    }
+
+    Double selectivity = mq.getSelectivity(this, filter);
+    return selectivity == null ? rowCount : rowCount * selectivity;
+  }
+
+  /** Calculates cost of scan taking into account number of columns in projection. */
+  @Override public @Nullable RelOptCost computeSelfCost(RelOptPlanner planner,
+      RelMetadataQuery mq) {
+    // calculating base cost using default implementation
+    RelOptCost cost = super.computeSelfCost(planner, mq);
+    if (cost == null || projection == null) {
+      return cost;
+    }
+
+    // adjusting cost proportionally to number of projection columns
+    int columnCount = table.getRowType().getFieldCount();
+    return cost.multiplyBy(((double) Math.max(projection.size(), 1)) / columnCount);
+  }
+
+  @Override public RelWriter explainTerms(RelWriter pw) {
+    return super.explainTerms(pw)
+        .itemIf("filter", filter, filter != null)
+        .itemIf("projection", projection, projection != null);
+  }
+}

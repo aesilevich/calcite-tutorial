@@ -47,7 +47,7 @@ public class CalciteTutorial {
     CalciteTutorialDatabase db = new CalciteTutorialDatabase(catalog);
 
     // converting query to relation tree
-    String sql = "select x + 1 from (select y + 2 as x from (values (10), (20), (30)) as t(y)) as s";
+    String sql = "select name from public.users where id > 10";
     RelRoot root = db.processQuery(sql);
 
     // dumping relational tree to stdout
