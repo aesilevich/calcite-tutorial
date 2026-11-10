@@ -233,6 +233,16 @@ class CalciteTutorialDatabaseTest {
             + "projection=[[1]])\n"));
   }
 
+  /** Tests processing query with expression in select list and converting it to physical calc */
+  @Test void testProcessQueryWithCalc() throws Exception {
+    RelRoot root = database.processQuery("select id + 1 from users where id > 10");
+
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalCalc(expr#0=[{inputs}], expr#1=[1], expr#2=[+($t0, $t1)], EXPR$0=[$t2])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]], filter=[>($0, 10)], "
+            + "projection=[[0]])\n"));
+  }
+
   /** Tests pushing single filter into physical table scan */
   @Test void testPushFilterIntoScan() {
     PhysicalRelBuilder builder = database.createRelBuilder();
@@ -763,5 +773,117 @@ class CalciteTutorialDatabaseTest {
 
     RelRoot root = database.optimizeQueryPhysical(RelRoot.of(original, SqlKind.SELECT));
     assertThat(RelOptUtil.toString(root.rel), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests converting physical filter to physical calc */
+  @Test void testConvertPhysicalFilterToCalc() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    RelNode rel = builder
+        .physicalScan("tutorial", "users")
+        .physicalFilter(builder.greaterThan(builder.field("id"), builder.literal(10)))
+        .build();
+
+    RelRoot root = database.convertToCalc(RelRoot.of(rel, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalCalc(expr#0..2=[{inputs}], expr#3=[10], expr#4=[>($t0, $t3)], "
+            + "proj#0..2=[{exprs}], $condition=[$t4])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests converting physical project to physical calc */
+  @Test void testConvertPhysicalProjectToCalc() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    RelNode rel = builder
+        .physicalScan("tutorial", "users")
+        .physicalProject(builder.field("dep_id"),
+            builder.call(SqlStdOperatorTable.PLUS, builder.field("id"), builder.literal(1)))
+        .build();
+
+    RelRoot root = database.convertToCalc(RelRoot.of(rel, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalCalc(expr#0..2=[{inputs}], expr#3=[1], expr#4=[+($t0, $t3)], "
+            + "dep_id=[$t2], $f1=[$t4])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests merging two physical filters into single physical calc */
+  @Test void testMergePhysicalFiltersToCalc() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    builder
+        .physicalScan("tutorial", "users")
+        .physicalFilter(builder.greaterThan(builder.field("id"), builder.literal(10)));
+    RelNode rel = builder
+        .physicalFilter(builder.lessThan(builder.field("dep_id"), builder.literal(5)))
+        .build();
+
+    RelRoot root = database.convertToCalc(RelRoot.of(rel, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalCalc(expr#0..2=[{inputs}], expr#3=[10], expr#4=[>($t0, $t3)], "
+            + "expr#5=[5], expr#6=[<($t2, $t5)], expr#7=[AND($t4, $t6)], "
+            + "proj#0..2=[{exprs}], $condition=[$t7])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests merging two physical projects into single physical calc */
+  @Test void testMergePhysicalProjectsToCalc() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    builder
+        .physicalScan("tutorial", "users")
+        .physicalProject(builder.field("dep_id"),
+            builder.call(SqlStdOperatorTable.PLUS, builder.field("id"), builder.literal(1)));
+    RelNode rel = builder
+        .physicalProject(
+            builder.call(SqlStdOperatorTable.PLUS, builder.field(1), builder.field("dep_id")))
+        .build();
+
+    RelRoot root = database.convertToCalc(RelRoot.of(rel, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalCalc(expr#0..2=[{inputs}], expr#3=[1], expr#4=[+($t0, $t3)], "
+            + "expr#5=[+($t4, $t2)], $f0=[$t5])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests that common sub-expressions of physical project are computed once in physical calc */
+  @Test void testConvertPhysicalProjectWithCommonExpressionsToCalc() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    RelNode rel = builder
+        .physicalScan("tutorial", "users")
+        .physicalProject(builder.field("name"),
+            builder.call(SqlStdOperatorTable.MULTIPLY,
+                builder.call(SqlStdOperatorTable.PLUS,
+                    builder.field("id"), builder.field("dep_id")),
+                builder.literal(2)),
+            builder.call(SqlStdOperatorTable.PLUS,
+                builder.call(SqlStdOperatorTable.MULTIPLY,
+                    builder.call(SqlStdOperatorTable.PLUS,
+                        builder.field("id"), builder.field("dep_id")),
+                    builder.literal(2)),
+                builder.literal(1)))
+        .build();
+
+    RelRoot root = database.convertToCalc(RelRoot.of(rel, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalCalc(expr#0..2=[{inputs}], expr#3=[+($t0, $t2)], expr#4=[2], "
+            + "expr#5=[*($t3, $t4)], expr#6=[1], expr#7=[+($t5, $t6)], "
+            + "name=[$t1], $f1=[$t5], $f2=[$t7])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests merging physical project and physical filter into single physical calc */
+  @Test void testMergePhysicalProjectAndFilterToCalc() {
+    PhysicalRelBuilder builder = database.createRelBuilder();
+    builder
+        .physicalScan("tutorial", "users")
+        .physicalFilter(builder.greaterThan(builder.field("id"), builder.literal(10)));
+    RelNode rel = builder
+        .physicalProject(builder.field("name"),
+            builder.call(SqlStdOperatorTable.PLUS, builder.field("id"), builder.literal(1)))
+        .build();
+
+    RelRoot root = database.convertToCalc(RelRoot.of(rel, SqlKind.SELECT));
+    assertThat(RelOptUtil.toString(root.rel),
+        is("PhysicalCalc(expr#0..2=[{inputs}], expr#3=[1], expr#4=[+($t0, $t3)], "
+            + "expr#5=[10], expr#6=[>($t0, $t5)], name=[$t1], $f1=[$t4], $condition=[$t6])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
   }
 }
