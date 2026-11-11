@@ -2,14 +2,15 @@ package com.example.calcite;
 
 import com.example.calcite.parser.impl.SqlParserImpl;
 import com.example.calcite.physical.PhysicalCalc;
+import com.example.calcite.logical.LogicalFilterToScanRule;
+import com.example.calcite.logical.LogicalProjectToScanRule;
+import com.example.calcite.logical.LogicalTableScanWithFilterAndProjectRule;
 import com.example.calcite.physical.PhysicalConvention;
 import com.example.calcite.physical.PhysicalFilter;
 import com.example.calcite.physical.PhysicalFilterRule;
-import com.example.calcite.physical.PhysicalFilterScanRule;
 import com.example.calcite.physical.PhysicalFilterToCalcRule;
 import com.example.calcite.physical.PhysicalProject;
 import com.example.calcite.physical.PhysicalProjectRule;
-import com.example.calcite.physical.PhysicalProjectScanRule;
 import com.example.calcite.physical.PhysicalProjectToCalcRule;
 import com.example.calcite.physical.PhysicalRelBuilder;
 import com.example.calcite.physical.PhysicalTableScanRule;
@@ -112,8 +113,13 @@ public class CalciteTutorialDatabase {
     return schema;
   }
 
+  /* Creates relational builder with new cluster */
+  public com.example.calcite.logical.RelBuilder createRelBuilder() {
+    return com.example.calcite.logical.RelBuilder.create(createCluster(), catalogReader);
+  }
+
   /* Creates physical relational builder with new cluster */
-  public PhysicalRelBuilder createRelBuilder() {
+  public PhysicalRelBuilder createPhysicalRelBuilder() {
     return PhysicalRelBuilder.create(createCluster(), catalogReader);
   }
 
@@ -194,11 +200,12 @@ public class CalciteTutorialDatabase {
 
     // converting logical nodes to physical nodes with Volcano planner
     RelOptPlanner volcanoPlanner = rel.getCluster().getPlanner();
+    volcanoPlanner.addRule(LogicalTableScanWithFilterAndProjectRule.INSTANCE);
+    volcanoPlanner.addRule(LogicalFilterToScanRule.INSTANCE);
+    volcanoPlanner.addRule(LogicalProjectToScanRule.INSTANCE);
     volcanoPlanner.addRule(PhysicalTableScanRule.INSTANCE);
     volcanoPlanner.addRule(PhysicalProjectRule.INSTANCE);
     volcanoPlanner.addRule(PhysicalFilterRule.INSTANCE);
-    volcanoPlanner.addRule(PhysicalFilterScanRule.INSTANCE);
-    volcanoPlanner.addRule(PhysicalProjectScanRule.INSTANCE);
     volcanoPlanner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
     volcanoPlanner.addRule(CoreRules.PROJECT_MERGE);
     volcanoPlanner.addRule(CoreRules.FILTER_AGGREGATE_TRANSPOSE);

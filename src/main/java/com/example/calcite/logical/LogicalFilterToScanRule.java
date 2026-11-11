@@ -1,27 +1,28 @@
-package com.example.calcite.physical;
+package com.example.calcite.logical;
 
 import java.util.List;
 
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
+import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPermuteInputsShuttle;
 import org.apache.calcite.rex.RexUtil;
 import org.apache.calcite.util.mapping.Mappings;
 import org.immutables.value.Value;
 
-/** Rule that pushes physical filter condition into physical table scan. */
+/** Rule that pushes logical filter condition into logical scan with filter and project. */
 @Value.Enclosing
-public class PhysicalFilterScanRule extends RelRule<PhysicalFilterScanRule.Config> {
-  public static final PhysicalFilterScanRule INSTANCE = Config.DEFAULT.toRule();
+public class LogicalFilterToScanRule extends RelRule<LogicalFilterToScanRule.Config> {
+  public static final LogicalFilterToScanRule INSTANCE = Config.DEFAULT.toRule();
 
-  protected PhysicalFilterScanRule(Config config) {
+  protected LogicalFilterToScanRule(Config config) {
     super(config);
   }
 
   @Override public void onMatch(RelOptRuleCall call) {
-    PhysicalFilter filter = call.rel(0);
-    PhysicalTableScan scan = call.rel(1);
+    LogicalFilter filter = call.rel(0);
+    LogicalTableScanWithFilterAndProject scan = call.rel(1);
 
     // converting references to scan output into references to table columns
     RexNode condition = filter.getCondition();
@@ -38,21 +39,21 @@ public class PhysicalFilterScanRule extends RelRule<PhysicalFilterScanRule.Confi
           List.of(condition, scan.getFilter()));
     }
 
-    call.transformTo(new PhysicalTableScan(scan.getCluster(), scan.getTraitSet(),
+    call.transformTo(new LogicalTableScanWithFilterAndProject(scan.getCluster(), scan.getTraitSet(),
         scan.getHints(), scan.getTable(), condition, scan.getProjection()));
   }
 
   /** Rule configuration. */
   @Value.Immutable(singleton = true)
   public interface Config extends RelRule.Config {
-    Config DEFAULT = ImmutablePhysicalFilterScanRule.Config.of()
+    Config DEFAULT = ImmutableLogicalFilterToScanRule.Config.of()
         .withOperandSupplier(b0 ->
-            b0.operand(PhysicalFilter.class).oneInput(b1 ->
-                b1.operand(PhysicalTableScan.class).noInputs()))
+            b0.operand(LogicalFilter.class).oneInput(b1 ->
+                b1.operand(LogicalTableScanWithFilterAndProject.class).noInputs()))
         .as(Config.class);
 
-    @Override default PhysicalFilterScanRule toRule() {
-      return new PhysicalFilterScanRule(this);
+    @Override default LogicalFilterToScanRule toRule() {
+      return new LogicalFilterToScanRule(this);
     }
   }
 }

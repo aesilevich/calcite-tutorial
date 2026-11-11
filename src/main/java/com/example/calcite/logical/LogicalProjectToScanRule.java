@@ -1,4 +1,4 @@
-package com.example.calcite.physical;
+package com.example.calcite.logical;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -6,7 +6,7 @@ import java.util.List;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.plan.RelOptUtil.InputFinder;
-import org.apache.calcite.rel.core.Project;
+import org.apache.calcite.rel.logical.LogicalProject;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPermuteInputsShuttle;
@@ -15,18 +15,18 @@ import org.apache.calcite.util.ImmutableIntList;
 import org.apache.calcite.util.mapping.Mappings;
 import org.immutables.value.Value;
 
-/** Rule that pushes project into physical table scan node. */
+/** Rule that pushes logical project into logical scan with filter and project. */
 @Value.Enclosing
-public class PhysicalProjectScanRule extends RelRule<PhysicalProjectScanRule.Config> {
-  public static final PhysicalProjectScanRule INSTANCE = Config.DEFAULT.toRule();
+public class LogicalProjectToScanRule extends RelRule<LogicalProjectToScanRule.Config> {
+  public static final LogicalProjectToScanRule INSTANCE = Config.DEFAULT.toRule();
 
-  protected PhysicalProjectScanRule(Config config) {
+  protected LogicalProjectToScanRule(Config config) {
     super(config);
   }
 
   @Override public void onMatch(RelOptRuleCall call) {
-    Project project = call.rel(0);
-    PhysicalTableScan scan = call.rel(1);
+    LogicalProject project = call.rel(0);
+    LogicalTableScanWithFilterAndProject scan = call.rel(1);
 
     // building list of column numbers in current scan output taking into account scan projection
     int tableColCount = scan.getTable().getRowType().getFieldCount();
@@ -38,7 +38,7 @@ public class PhysicalProjectScanRule extends RelRule<PhysicalProjectScanRule.Con
     ImmutableBitSet usedOutputs = InputFinder.bits(project.getProjects(), null);
 
     if (usedOutputs.isEmpty()) {
-      // we don't want to have a physical scan node with an empty list of columns because
+      // we don't want to have a scan node with an empty list of columns because
       // it can't be converted to SQL, so we skip these cases.
       return;
     }
@@ -70,8 +70,9 @@ public class PhysicalProjectScanRule extends RelRule<PhysicalProjectScanRule.Con
       }
 
       // creating new scan node
-      PhysicalTableScan newScan = new PhysicalTableScan(scan.getCluster(), scan.getTraitSet(),
-          scan.getHints(), scan.getTable(), scan.getFilter(), ImmutableIntList.copyOf(newColumns));
+      LogicalTableScanWithFilterAndProject newScan = new LogicalTableScanWithFilterAndProject(
+          scan.getCluster(), scan.getTraitSet(), scan.getHints(), scan.getTable(),
+          scan.getFilter(), ImmutableIntList.copyOf(newColumns));
 
       call.transformTo(newScan);
     } else {
@@ -82,12 +83,13 @@ public class PhysicalProjectScanRule extends RelRule<PhysicalProjectScanRule.Con
       }
 
       // creating new scan node with only used columns
-      PhysicalTableScan newScan = new PhysicalTableScan(scan.getCluster(), scan.getTraitSet(),
-          scan.getHints(), scan.getTable(), scan.getFilter(), ImmutableIntList.copyOf(newColumns));
+      LogicalTableScanWithFilterAndProject newScan = new LogicalTableScanWithFilterAndProject(
+          scan.getCluster(), scan.getTraitSet(), scan.getHints(), scan.getTable(),
+          scan.getFilter(), ImmutableIntList.copyOf(newColumns));
 
       // creating new project node with remapped input numbers
-      PhysicalProject newProject = new PhysicalProject(project.getCluster(), project.getTraitSet(),
-          project.getHints(), newScan, newProjectExprs, project.getRowType());
+      LogicalProject newProject = LogicalProject.create(newScan, project.getHints(),
+          newProjectExprs, project.getRowType(), project.getVariablesSet());
 
       call.transformTo(newProject);
     }
@@ -96,14 +98,14 @@ public class PhysicalProjectScanRule extends RelRule<PhysicalProjectScanRule.Con
   /** Rule configuration. */
   @Value.Immutable(singleton = true)
   public interface Config extends RelRule.Config {
-    Config DEFAULT = ImmutablePhysicalProjectScanRule.Config.of()
+    Config DEFAULT = ImmutableLogicalProjectToScanRule.Config.of()
         .withOperandSupplier(b0 ->
-            b0.operand(PhysicalProject.class)
-                .oneInput(b1 -> b1.operand(PhysicalTableScan.class).noInputs()))
+            b0.operand(LogicalProject.class)
+                .oneInput(b1 -> b1.operand(LogicalTableScanWithFilterAndProject.class).noInputs()))
         .as(Config.class);
 
-    @Override default PhysicalProjectScanRule toRule() {
-      return new PhysicalProjectScanRule(this);
+    @Override default LogicalProjectToScanRule toRule() {
+      return new LogicalProjectToScanRule(this);
     }
   }
 }
