@@ -225,11 +225,10 @@ class LogicalOptimizeProgramTest {
         .scan("tutorial", "users")
         .filter(expectedBuilder.greaterThan(expectedBuilder.field("id"),
             expectedBuilder.literal(10)))
-        .project(expectedBuilder.alias(
+        .project(expectedBuilder.field("id"))
+        .project(expectedBuilder.call(SqlStdOperatorTable.PLUS,
             expectedBuilder.call(SqlStdOperatorTable.PLUS, expectedBuilder.field("id"),
                 expectedBuilder.literal(7)),
-            "a"))
-        .project(expectedBuilder.call(SqlStdOperatorTable.PLUS, expectedBuilder.field("a"),
             expectedBuilder.literal(3)))
         .build();
 
@@ -255,6 +254,7 @@ class LogicalOptimizeProgramTest {
         .filter(expectedBuilder.greaterThan(expectedBuilder.field("id"),
             expectedBuilder.literal(7)))
         .scan("tutorial", "departments")
+        .project(expectedBuilder.field("id"))
         .join(JoinRelType.INNER, expectedBuilder.equals(
             expectedBuilder.field(2, 0, "dep_id"), expectedBuilder.field(2, 1, "id")))
         .project(expectedBuilder.field(1))
@@ -297,11 +297,69 @@ class LogicalOptimizeProgramTest {
         .scan("tutorial", "users")
         .filter(expectedBuilder.greaterThan(expectedBuilder.field("dep_id"),
             expectedBuilder.literal(5)))
+        .project(expectedBuilder.field("id"), expectedBuilder.field("dep_id"))
         .aggregate(expectedBuilder.groupKey("dep_id"),
             expectedBuilder.avg(expectedBuilder.field("id")).as("avg_id"))
         .filter(expectedBuilder.greaterThan(expectedBuilder.field("avg_id"),
             expectedBuilder.literal(10)))
         .project(expectedBuilder.field("dep_id"))
+        .build();
+
+    assertThat(RelOptUtil.toString(optimize(rel)), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests trimming of unused fields in query with join */
+  @Test void testTrimUnusedFields() {
+    RelBuilder builder = createRelBuilder();
+    RelNode rel = builder
+        .scan("tutorial", "users")
+        .scan("tutorial", "departments")
+        .join(JoinRelType.INNER,
+            builder.equals(builder.field(2, 0, "dep_id"), builder.field(2, 1, "id")))
+        .project(builder.field(1))
+        .build();
+
+    RelBuilder expectedBuilder = createRelBuilder();
+    RelNode expected = expectedBuilder
+        .scan("tutorial", "users")
+        .project(expectedBuilder.field("name"), expectedBuilder.field("dep_id"))
+        .scan("tutorial", "departments")
+        .project(expectedBuilder.field("id"))
+        .join(JoinRelType.INNER, expectedBuilder.equals(
+            expectedBuilder.field(2, 0, "dep_id"), expectedBuilder.field(2, 1, "id")))
+        .project(expectedBuilder.field("name"))
+        .build();
+
+    assertThat(RelOptUtil.toString(optimize(rel)), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests trimming of unused fields in query with two joins */
+  @Test void testTrimUnusedFieldsWithTwoJoins() {
+    RelBuilder builder = createRelBuilder();
+    RelNode rel = builder
+        .scan("tutorial", "users")
+        .scan("tutorial", "departments")
+        .join(JoinRelType.INNER,
+            builder.equals(builder.field(2, 0, "dep_id"), builder.field(2, 1, "id")))
+        .scan("tutorial", "departments")
+        .join(JoinRelType.INNER,
+            builder.equals(builder.field(2, 0, "dep_id"), builder.field(2, 1, "id")))
+        .project(builder.field(1))
+        .build();
+
+    RelBuilder expectedBuilder = createRelBuilder();
+    RelNode expected = expectedBuilder
+        .scan("tutorial", "users")
+        .project(expectedBuilder.field("name"), expectedBuilder.field("dep_id"))
+        .scan("tutorial", "departments")
+        .project(expectedBuilder.field("id"))
+        .join(JoinRelType.INNER, expectedBuilder.equals(
+            expectedBuilder.field(2, 0, "dep_id"), expectedBuilder.field(2, 1, "id")))
+        .scan("tutorial", "departments")
+        .project(expectedBuilder.field("id"))
+        .join(JoinRelType.INNER, expectedBuilder.equals(
+            expectedBuilder.field(2, 0, "dep_id"), expectedBuilder.field(2, 1, "id")))
+        .project(expectedBuilder.field("name"))
         .build();
 
     assertThat(RelOptUtil.toString(optimize(rel)), is(RelOptUtil.toString(expected)));

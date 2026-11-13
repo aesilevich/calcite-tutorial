@@ -122,10 +122,7 @@ public class CalciteTutorialDatabase {
     validatedNode.accept(new UnsupportedOperationValidator());
 
     // converting query to relational tree
-    RelRoot root = converter.convertQuery(validatedNode, false, true);
-
-    // trimming unused fields
-    return root.withRel(converter.trimUnusedFields(true, root.rel));
+    return converter.convertQuery(validatedNode, false, true);
   }
 
   /* Optimizes logical relational tree. */

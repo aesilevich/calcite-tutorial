@@ -12,6 +12,7 @@ import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.sql2rel.RelDecorrelator;
+import org.apache.calcite.sql2rel.RelFieldTrimmer;
 import org.apache.calcite.tools.Program;
 import org.apache.calcite.tools.RelBuilder;
 
@@ -22,6 +23,11 @@ public class LogicalOptimizeProgram implements Program {
   @Override public RelNode run(RelOptPlanner planner, RelNode rel,
       RelTraitSet requiredOutputTraits, List<RelOptMaterialization> materializations,
       List<RelOptLattice> lattices) {
+
+    // trimming unused fields
+    RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);
+    rel = new RelFieldTrimmer(null, relBuilder).trim(rel);
+
     // creating HEP planner
     HepProgram program = HepProgram.builder()
         .addRuleCollection(List.of(
@@ -50,7 +56,6 @@ public class LogicalOptimizeProgram implements Program {
     rel = hepPlanner.findBestExp();
 
     // decorrelating query
-    RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);
     return RelDecorrelator.decorrelateQuery(rel, relBuilder);
   }
 }
