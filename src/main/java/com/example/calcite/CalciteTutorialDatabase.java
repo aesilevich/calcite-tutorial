@@ -1,19 +1,8 @@
 package com.example.calcite;
 
 import com.example.calcite.parser.impl.SqlParserImpl;
-import com.example.calcite.physical.PhysicalCalc;
-import com.example.calcite.logical.LogicalFilterToScanRule;
-import com.example.calcite.logical.LogicalProjectToScanRule;
-import com.example.calcite.logical.LogicalTableScanWithFilterAndProjectRule;
 import com.example.calcite.physical.PhysicalConvention;
-import com.example.calcite.physical.PhysicalFilter;
-import com.example.calcite.physical.PhysicalFilterRule;
-import com.example.calcite.physical.PhysicalFilterToCalcRule;
-import com.example.calcite.physical.PhysicalProject;
-import com.example.calcite.physical.PhysicalProjectRule;
-import com.example.calcite.physical.PhysicalProjectToCalcRule;
 import com.example.calcite.physical.PhysicalRelBuilder;
-import com.example.calcite.physical.PhysicalTableScanRule;
 import com.example.calcite.schema.JsonSchema;
 import com.example.calcite.sql.UnsupportedOperationValidator;
 import com.example.calcite.sql.OperatorTable;
@@ -30,18 +19,11 @@ import org.apache.calcite.jdbc.CalciteSchema;
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.plan.ConventionTraitDef;
 import org.apache.calcite.plan.RelOptCluster;
-import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelTraitSet;
-import org.apache.calcite.plan.hep.HepPlanner;
-import org.apache.calcite.plan.hep.HepProgram;
 import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
-import org.apache.calcite.rel.core.RelFactories;
-import org.apache.calcite.rel.rules.CoreRules;
-import org.apache.calcite.rel.rules.FilterCalcMergeRule;
-import org.apache.calcite.rel.rules.ProjectCalcMergeRule;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.impl.AbstractSchema;
@@ -52,10 +34,8 @@ import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.util.SqlOperatorTables;
 import org.apache.calcite.sql.validate.SqlValidator;
 import org.apache.calcite.sql.validate.SqlValidatorUtil;
-import org.apache.calcite.sql2rel.RelDecorrelator;
 import org.apache.calcite.sql2rel.SqlToRelConverter;
 import org.apache.calcite.sql2rel.StandardConvertletTable;
-import org.apache.calcite.tools.RelBuilder;
 
 /**
  * Main database class for tutorial. Incapsulates initialization of parser, validator
@@ -142,48 +122,14 @@ public class CalciteTutorialDatabase {
     validatedNode.accept(new UnsupportedOperationValidator());
 
     // converting query to relational tree
-    RelRoot root = converter.convertQuery(validatedNode, false, true);
-
-    // trimming unused fields
-    return root.withRel(converter.trimUnusedFields(true, root.rel));
+    return converter.convertQuery(validatedNode, false, true);
   }
 
   /* Optimizes logical relational tree. */
   public RelRoot optimizeQueryLogical(RelRoot root) {
     RelNode rel = root.rel;
-
-    // creating HEP planner
-    HepProgram program = HepProgram.builder()
-        .addRuleCollection(List.of(
-            CoreRules.FILTER_SUB_QUERY_TO_CORRELATE,
-            CoreRules.PROJECT_SUB_QUERY_TO_CORRELATE,
-            CoreRules.JOIN_SUB_QUERY_TO_CORRELATE,
-
-            CoreRules.FILTER_REDUCE_EXPRESSIONS,
-            CoreRules.PROJECT_REDUCE_EXPRESSIONS,
-            CoreRules.JOIN_REDUCE_EXPRESSIONS,
-            CoreRules.CALC_REDUCE_EXPRESSIONS,
-            CoreRules.WINDOW_REDUCE_EXPRESSIONS))
-        .addRuleCollection(List.of(
-            CoreRules.FILTER_PROJECT_TRANSPOSE,
-            CoreRules.FILTER_INTO_JOIN,
-            CoreRules.JOIN_CONDITION_PUSH,
-            CoreRules.FILTER_AGGREGATE_TRANSPOSE,
-            CoreRules.FILTER_SET_OP_TRANSPOSE,
-            CoreRules.FILTER_MERGE,
-            CoreRules.JOIN_PUSH_EXPRESSIONS))
-        .build();
-    HepPlanner hepPlanner = new HepPlanner(program);
-    hepPlanner.setRoot(root.rel);
-
-    // optimizing relation tree with HEP planner
-    rel = hepPlanner.findBestExp();
-
-    // decorrelating query
-    RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(rel.getCluster(), null);
-    rel = RelDecorrelator.decorrelateQuery(rel, relBuilder);
-
-    return root.withRel(rel);
+    return root.withRel(LogicalOptimizeProgram.INSTANCE.run(rel.getCluster().getPlanner(), rel,
+        rel.getTraitSet(), List.of(), List.of()));
   }
 
   /* Parses and validates query, converts it to logical relational tree and optimizes it. */
@@ -197,48 +143,16 @@ public class CalciteTutorialDatabase {
    */
   public RelRoot optimizeQueryPhysical(RelRoot root) {
     RelNode rel = root.rel;
-
-    // converting logical nodes to physical nodes with Volcano planner
-    RelOptPlanner volcanoPlanner = rel.getCluster().getPlanner();
-    volcanoPlanner.addRule(LogicalTableScanWithFilterAndProjectRule.INSTANCE);
-    volcanoPlanner.addRule(LogicalFilterToScanRule.INSTANCE);
-    volcanoPlanner.addRule(LogicalProjectToScanRule.INSTANCE);
-    volcanoPlanner.addRule(PhysicalTableScanRule.INSTANCE);
-    volcanoPlanner.addRule(PhysicalProjectRule.INSTANCE);
-    volcanoPlanner.addRule(PhysicalFilterRule.INSTANCE);
-    volcanoPlanner.addRule(CoreRules.FILTER_PROJECT_TRANSPOSE);
-    volcanoPlanner.addRule(CoreRules.PROJECT_MERGE);
-    volcanoPlanner.addRule(CoreRules.FILTER_AGGREGATE_TRANSPOSE);
-    volcanoPlanner.addRule(CoreRules.FILTER_SET_OP_TRANSPOSE);
-
     RelTraitSet physicalTraits = rel.getTraitSet().replace(PhysicalConvention.INSTANCE);
-    if (!rel.getTraitSet().equals(physicalTraits)) {
-      rel = volcanoPlanner.changeTraits(rel, physicalTraits);
-    }
-
-    volcanoPlanner.setRoot(rel);
-    rel = volcanoPlanner.findBestExp();
-
-    return root.withRel(rel);
+    return root.withRel(PhysicalOptimizeProgram.INSTANCE.run(rel.getCluster().getPlanner(), rel,
+        physicalTraits, List.of(), List.of()));
   }
 
   /* Converts physical projects and filters to physical calcs with HEP planner. */
   public RelRoot convertToCalc(RelRoot root) {
-    HepProgram program = HepProgram.builder()
-        .addRuleCollection(List.of(
-            PhysicalProjectToCalcRule.INSTANCE,
-            PhysicalFilterToCalcRule.INSTANCE,
-            CoreRules.CALC_MERGE,
-            FilterCalcMergeRule.Config.DEFAULT
-                .withOperandFor(PhysicalFilter.class, PhysicalCalc.class)
-                .toRule(),
-            ProjectCalcMergeRule.Config.DEFAULT
-                .withOperandFor(PhysicalProject.class, PhysicalCalc.class)
-                .toRule()))
-        .build();
-    HepPlanner hepPlanner = new HepPlanner(program);
-    hepPlanner.setRoot(root.rel);
-    return root.withRel(hepPlanner.findBestExp());
+    RelNode rel = root.rel;
+    return root.withRel(ConvertToCalcProgram.INSTANCE.run(rel.getCluster().getPlanner(), rel,
+        rel.getTraitSet(), List.of(), List.of()));
   }
 
   /*
