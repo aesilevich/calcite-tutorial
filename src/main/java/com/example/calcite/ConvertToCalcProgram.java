@@ -2,6 +2,7 @@ package com.example.calcite;
 
 import java.util.List;
 
+import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.plan.RelOptLattice;
 import org.apache.calcite.plan.RelOptMaterialization;
 import org.apache.calcite.plan.RelOptPlanner;
@@ -31,6 +32,8 @@ public class ConvertToCalcProgram implements Program {
         .addRuleCollection(List.of(
             PhysicalProjectToCalcRule.INSTANCE,
             PhysicalFilterToCalcRule.INSTANCE,
+            EnumerableRules.ENUMERABLE_PROJECT_TO_CALC_RULE,
+            EnumerableRules.ENUMERABLE_FILTER_TO_CALC_RULE,
             CoreRules.CALC_MERGE,
             FilterCalcMergeRule.Config.DEFAULT
                 .withOperandFor(PhysicalFilter.class, PhysicalCalc.class)
