@@ -114,7 +114,7 @@ public class EnumerableFileScan extends TableScan implements EnumerableRel {
   /** Generates code that reads rows from CSV table. */
   @Override public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
     PhysType physType = PhysTypeImpl.of(implementor.getTypeFactory(), getRowType(),
-        JavaRowFormat.ARRAY, false);
+        JavaRowFormat.ARRAY);
 
     int[] columns = projection == null
         ? ImmutableIntList.identity(table.getRowType().getFieldCount()).toIntArray()

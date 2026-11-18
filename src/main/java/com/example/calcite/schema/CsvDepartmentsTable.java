@@ -46,9 +46,9 @@ public class CsvDepartmentsTable extends AbstractTable implements TranslatableTa
   }
 
   /** Returns rows of table with columns at specified indexes. */
-  public Enumerable<Object[]> scan(int[] projection) {
+  public Enumerable<Object> scan(int[] projection) {
     return new AbstractEnumerable<>() {
-      @Override public Enumerator<Object[]> enumerator() {
+      @Override public Enumerator<Object> enumerator() {
         return new CsvEnumerator(readerSupplier.get(), projection);
       }
     };
@@ -64,10 +64,10 @@ public class CsvDepartmentsTable extends AbstractTable implements TranslatableTa
   }
 
   /** Enumerator over CSV rows that closes reader when closed. */
-  private static class CsvEnumerator implements Enumerator<Object[]> {
+  private static class CsvEnumerator implements Enumerator<Object> {
     private final MappingIterator<String[]> rows;
     private final int[] projection;
-    private Object[] current;
+    private Object current;
 
     CsvEnumerator(Reader reader, int[] projection) {
       try {
@@ -80,7 +80,7 @@ public class CsvDepartmentsTable extends AbstractTable implements TranslatableTa
       this.projection = projection;
     }
 
-    @Override public Object[] current() {
+    @Override public Object current() {
       return current;
     }
 
@@ -90,10 +90,16 @@ public class CsvDepartmentsTable extends AbstractTable implements TranslatableTa
       }
 
       String[] values = rows.next();
-      current = new Object[projection.length];
-      for (int i = 0; i < projection.length; i++) {
-        current[i] = convert(projection[i], values[projection[i]]);
+      if (projection.length == 1) {
+        current = convert(projection[0], values[projection[0]]);
+        return true;
       }
+
+      Object[] row = new Object[projection.length];
+      for (int i = 0; i < projection.length; i++) {
+        row[i] = convert(projection[i], values[projection[i]]);
+      }
+      current = row;
       return true;
     }
 

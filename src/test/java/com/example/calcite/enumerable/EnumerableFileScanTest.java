@@ -110,6 +110,65 @@ class EnumerableFileScanTest {
     }
   }
 
+  /** Tests sorting single column read from CSV table */
+  @Test void testSortSingleColumnFromCsvTable() throws Exception {
+    String query = "select \"name\" from \"files\".\"departments\" order by \"name\"";
+    try (Connection connection = createConnection();
+        Statement statement = connection.createStatement();
+        ResultSet resultSet = statement.executeQuery(query)) {
+      List<String> names = new ArrayList<>();
+      while (resultSet.next()) {
+        names.add(resultSet.getString(1));
+      }
+      assertThat(names, is(List.of("Engineering", "Sales", "Support")));
+    }
+  }
+
+  /** Tests sorting single integer column read from CSV table in descending order */
+  @Test void testSortSingleIntegerColumnDescendingFromCsvTable() throws Exception {
+    String query = "select \"id\" from \"files\".\"departments\" order by \"id\" desc";
+    try (Connection connection = createConnection();
+        Statement statement = connection.createStatement();
+        ResultSet resultSet = statement.executeQuery(query)) {
+      List<Integer> ids = new ArrayList<>();
+      while (resultSet.next()) {
+        ids.add(resultSet.getInt(1));
+      }
+      assertThat(ids, is(List.of(3, 2, 1)));
+    }
+  }
+
+  /** Tests limit on single column read from CSV table */
+  @Test void testLimitSingleColumnFromCsvTable() throws Exception {
+    String query = "select \"name\" from \"files\".\"departments\" limit 2";
+    try (Connection connection = createConnection();
+        Statement statement = connection.createStatement();
+        ResultSet resultSet = statement.executeQuery(query)) {
+      List<String> names = new ArrayList<>();
+      while (resultSet.next()) {
+        names.add(resultSet.getString(1));
+      }
+      assertThat(names, is(List.of("Sales", "Engineering")));
+    }
+  }
+
+  /** Tests union of single columns read from CSV table */
+  @Test void testUnionSingleColumnsFromCsvTable() throws Exception {
+    String query = "select \"name\" from \"files\".\"departments\"\n"
+        + "union all\n"
+        + "select \"name\" from \"files\".\"departments\"";
+    try (Connection connection = createConnection();
+        Statement statement = connection.createStatement();
+        ResultSet resultSet = statement.executeQuery(query)) {
+      List<String> names = new ArrayList<>();
+      while (resultSet.next()) {
+        names.add(resultSet.getString(1));
+      }
+      assertThat(names, containsInAnyOrder("Sales", "Engineering", "Support",
+          "Sales", "Engineering", "Support"));
+    }
+  }
+
   /** Tests optimizing and executing join of HSQLDB table with CSV table */
   @Test void testJoinWithJdbcTable() throws Exception {
     String query = "select u.name, d.\"name\" from db.users u\n"
