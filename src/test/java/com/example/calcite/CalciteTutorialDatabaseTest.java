@@ -69,4 +69,21 @@ class CalciteTutorialDatabaseTest {
     assertThat(mq.getUsedTables(join), is(Set.of(users, departments)));
     assertThat(mq.getUsedTables(project), is(Set.of(users, departments)));
   }
+
+  /** Tests used tables metadata for filter with sub-query */
+  @Test void testUsedTablesWithSubQuery() {
+    com.example.calcite.logical.RelBuilder builder = database.createRelBuilder();
+    RelNode filter = builder
+        .scan("tutorial", "departments")
+        .filter(builder.exists(b -> b
+            .scan("tutorial", "users")
+            .build()))
+        .build();
+
+    TutorialRelMetadataQuery mq =
+        (TutorialRelMetadataQuery) filter.getCluster().getMetadataQuery();
+    List<String> users = List.of("tutorial", "users");
+    List<String> departments = List.of("tutorial", "departments");
+    assertThat(mq.getUsedTables(filter), is(Set.of(departments, users)));
+  }
 }

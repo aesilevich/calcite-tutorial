@@ -9,6 +9,9 @@ import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rel.metadata.ReflectiveRelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
+import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexShuttle;
+import org.apache.calcite.rex.RexSubQuery;
 
 import com.google.common.collect.ImmutableSet;
 
@@ -30,10 +33,19 @@ public class RelMdUsedTables implements UsedTables.Handler {
 
   /** Returns used tables for other nodes. */
   @Override public Set<List<String>> getUsedTables(RelNode rel, RelMetadataQuery mq) {
+    TutorialRelMetadataQuery tmq = (TutorialRelMetadataQuery) mq;
     ImmutableSet.Builder<List<String>> tables = ImmutableSet.builder();
     for (RelNode input : rel.getInputs()) {
-      tables.addAll(((TutorialRelMetadataQuery) mq).getUsedTables(input));
+      tables.addAll(tmq.getUsedTables(input));
     }
+
+    // collecting tables used in sub-queries of node expressions
+    rel.accept(new RexShuttle() {
+      @Override public RexNode visitSubQuery(RexSubQuery subQuery) {
+        tables.addAll(tmq.getUsedTables(subQuery.rel));
+        return subQuery;
+      }
+    });
     return tables.build();
   }
 }
