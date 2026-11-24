@@ -1,6 +1,7 @@
 package com.example.calcite;
 
 import com.example.calcite.metadata.RelMdJoinRowCount;
+import com.example.calcite.metadata.RelMdScanColumnUniqueness;
 import com.example.calcite.metadata.RelMdUsedTables;
 import com.example.calcite.metadata.TutorialRelMetadataQuery;
 import com.example.calcite.parser.impl.SqlParserImpl;
@@ -184,8 +185,10 @@ public class CalciteTutorialDatabase {
 
     // adding provider for custom metadata
     RelMetadataProvider provider = ChainedRelMetadataProvider.of(
-        List.of(RelMdUsedTables.SOURCE, RelMdJoinRowCount.SOURCE,
-            DefaultRelMetadataProvider.INSTANCE));
+        List.of(RelMdUsedTables.SOURCE,
+                RelMdJoinRowCount.SOURCE,
+                RelMdScanColumnUniqueness.SOURCE,
+                DefaultRelMetadataProvider.INSTANCE));
     cluster.setMetadataProvider(provider);
     JaninoRelMetadataProvider handlerProvider = JaninoRelMetadataProvider.of(provider);
     cluster.setMetadataQuerySupplier(() -> new TutorialRelMetadataQuery(handlerProvider));

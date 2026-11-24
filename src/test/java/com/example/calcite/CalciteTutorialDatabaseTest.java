@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import com.example.calcite.logical.RelBuilder;
 import com.example.calcite.metadata.TutorialRelMetadataQuery;
+import com.example.calcite.physical.PhysicalRelBuilder;
 import com.example.calcite.schema.JsonSchema;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -123,6 +124,58 @@ class CalciteTutorialDatabaseTest {
 
     assertThat(mq.areColumnsUnique(project, ImmutableBitSet.of(1)), is(true));
     assertThat(mq.areColumnsUnique(project, ImmutableBitSet.of(0)), is(false));
+  }
+
+  /** Tests column uniqueness for logical scan with projection */
+  @Test void testColumnUniquenessForLogicalScanWithProjection() throws Exception {
+    CalciteTutorialDatabase db = new CalciteTutorialDatabase(JsonSchema.parse("""
+        {"tables": [{"name": "users", "keys": [["id"]], "columns": [
+          {"name": "id", "type": "integer", "nullable": false},
+          {"name": "name", "type": "varchar", "nullable": false},
+          {"name": "dep_id", "type": "integer", "nullable": false}
+        ]}]}
+        """));
+
+    RelBuilder builder = db.createRelBuilder();
+    RelNode depIdScan = builder
+        .scan("tutorial", "users")
+        .withProject(builder.field("dep_id"))
+        .build();
+    RelNode depIdAndIdScan = builder
+        .scan("tutorial", "users")
+        .withProject(builder.field("dep_id"), builder.field("id"))
+        .build();
+
+    RelMetadataQuery mq = depIdScan.getCluster().getMetadataQuery();
+    assertThat(mq.areColumnsUnique(depIdScan, ImmutableBitSet.of(0)), is(false));
+    assertThat(mq.areColumnsUnique(depIdAndIdScan, ImmutableBitSet.of(0)), is(false));
+    assertThat(mq.areColumnsUnique(depIdAndIdScan, ImmutableBitSet.of(1)), is(true));
+  }
+
+  /** Tests column uniqueness for physical scan with projection */
+  @Test void testColumnUniquenessForPhysicalScanWithProjection() throws Exception {
+    CalciteTutorialDatabase db = new CalciteTutorialDatabase(JsonSchema.parse("""
+        {"tables": [{"name": "users", "keys": [["id"]], "columns": [
+          {"name": "id", "type": "integer", "nullable": false},
+          {"name": "name", "type": "varchar", "nullable": false},
+          {"name": "dep_id", "type": "integer", "nullable": false}
+        ]}]}
+        """));
+
+    PhysicalRelBuilder builder = db.createPhysicalRelBuilder();
+    RelNode depIdScan = builder
+        .physicalScan("tutorial", "users")
+        .withProjection(builder.field("dep_id"))
+        .build();
+    RelNode depIdAndIdScan = builder
+        .physicalScan("tutorial", "users")
+        .withProjection(builder.field("dep_id"), builder.field("id"))
+        .build();
+
+    RelMetadataQuery mq = depIdScan.getCluster().getMetadataQuery();
+    assertThat(mq.areColumnsUnique(depIdScan, ImmutableBitSet.of(0)), is(false));
+    assertThat(mq.areColumnsUnique(depIdAndIdScan, ImmutableBitSet.of(0)), is(false));
+    assertThat(mq.areColumnsUnique(depIdAndIdScan, ImmutableBitSet.of(1)), is(true));
   }
 
   /** Tests that unique keys of table from custom JDBC schema are propagated to metadata */
