@@ -248,6 +248,140 @@ class CalciteTutorialDatabaseTest {
         join.getCluster().getMetadataQuery(), join, join.getCondition()));
   }
 
+  /** Tests row count estimation for filter on unique input above inner join */
+  @Test void testInnerJoinRowCountWithFilterAboveJoin() throws Exception {
+    CalciteTutorialDatabase db = new CalciteTutorialDatabase(JsonSchema.parse("""
+        {"tables": [
+          {"name": "big", "rowCount": 1000, "columns": [
+            {"name": "id", "type": "integer", "nullable": false},
+            {"name": "small_id", "type": "integer", "nullable": false}
+          ]},
+          {"name": "small", "rowCount": 100, "keys": [["id"]], "columns": [
+            {"name": "id", "type": "integer", "nullable": false},
+            {"name": "x", "type": "integer", "nullable": false}
+          ]}
+        ]}
+        """));
+
+    RelBuilder builder = db.createRelBuilder();
+    RelNode rel = builder
+        .scan("tutorial", "big")
+        .scan("tutorial", "small")
+        .join(JoinRelType.INNER,
+            builder.equals(builder.field(2, 0, "small_id"), builder.field(2, 1, "id")))
+        .filter(builder.greaterThan(builder.field("x"), builder.literal(5)))
+        .build();
+
+    assertThat(getRowCount(rel), is(500.0));
+  }
+
+  /** Tests row count estimation for inner join with filter on unique input */
+  @Test void testInnerJoinRowCountWithFilteredUniqueInput() throws Exception {
+    CalciteTutorialDatabase db = new CalciteTutorialDatabase(JsonSchema.parse("""
+        {"tables": [
+          {"name": "big", "rowCount": 1000, "columns": [
+            {"name": "id", "type": "integer", "nullable": false},
+            {"name": "small_id", "type": "integer", "nullable": false}
+          ]},
+          {"name": "small", "rowCount": 100, "keys": [["id"]], "columns": [
+            {"name": "id", "type": "integer", "nullable": false},
+            {"name": "x", "type": "integer", "nullable": false}
+          ]}
+        ]}
+        """));
+
+    RelBuilder builder = db.createRelBuilder();
+    RelNode rel = builder
+        .scan("tutorial", "big")
+        .scan("tutorial", "small")
+        .filter(builder.greaterThan(builder.field("x"), builder.literal(5)))
+        .join(JoinRelType.INNER,
+            builder.equals(builder.field(2, 0, "small_id"), builder.field(2, 1, "id")))
+        .build();
+
+    assertThat(getRowCount(rel), is(500.0));
+  }
+
+  /** Tests row count estimation for inner join with filter on unique left input */
+  @Test void testInnerJoinRowCountWithFilteredUniqueLeftInput() throws Exception {
+    CalciteTutorialDatabase db = new CalciteTutorialDatabase(JsonSchema.parse("""
+        {"tables": [
+          {"name": "big", "rowCount": 1000, "columns": [
+            {"name": "id", "type": "integer", "nullable": false},
+            {"name": "small_id", "type": "integer", "nullable": false}
+          ]},
+          {"name": "small", "rowCount": 100, "keys": [["id"]], "columns": [
+            {"name": "id", "type": "integer", "nullable": false},
+            {"name": "x", "type": "integer", "nullable": false}
+          ]}
+        ]}
+        """));
+
+    RelBuilder builder = db.createRelBuilder();
+    RelNode rel = builder
+        .scan("tutorial", "small")
+        .filter(builder.greaterThan(builder.field("x"), builder.literal(5)))
+        .scan("tutorial", "big")
+        .join(JoinRelType.INNER,
+            builder.equals(builder.field(2, 0, "id"), builder.field(2, 1, "small_id")))
+        .build();
+
+    assertThat(getRowCount(rel), is(500.0));
+  }
+
+  /** Tests row count estimation for inner join of unique inputs with filter on one input */
+  @Test void testInnerJoinRowCountWithFilteredUniqueInputs() throws Exception {
+    CalciteTutorialDatabase db = new CalciteTutorialDatabase(JsonSchema.parse("""
+        {"tables": [
+          {"name": "small", "rowCount": 100, "keys": [["id"]], "columns": [
+            {"name": "id", "type": "integer", "nullable": false}
+          ]},
+          {"name": "medium", "rowCount": 200, "keys": [["id"]], "columns": [
+            {"name": "id", "type": "integer", "nullable": false},
+            {"name": "x", "type": "integer", "nullable": false}
+          ]}
+        ]}
+        """));
+
+    RelBuilder builder = db.createRelBuilder();
+    RelNode rel = builder
+        .scan("tutorial", "small")
+        .scan("tutorial", "medium")
+        .filter(builder.greaterThan(builder.field("x"), builder.literal(5)))
+        .join(JoinRelType.INNER,
+            builder.equals(builder.field(2, 0, "id"), builder.field(2, 1, "id")))
+        .build();
+
+    assertThat(getRowCount(rel), is(50.0));
+  }
+
+  /** Tests row count estimation for inner join with scan filter on unique input */
+  @Test void testInnerJoinRowCountWithScanFilterOnUniqueInput() throws Exception {
+    CalciteTutorialDatabase db = new CalciteTutorialDatabase(JsonSchema.parse("""
+        {"tables": [
+          {"name": "big", "rowCount": 1000, "columns": [
+            {"name": "id", "type": "integer", "nullable": false},
+            {"name": "small_id", "type": "integer", "nullable": false}
+          ]},
+          {"name": "small", "rowCount": 100, "keys": [["id"]], "columns": [
+            {"name": "id", "type": "integer", "nullable": false},
+            {"name": "x", "type": "integer", "nullable": false}
+          ]}
+        ]}
+        """));
+
+    RelBuilder builder = db.createRelBuilder();
+    RelNode rel = builder
+        .scan("tutorial", "big")
+        .scan("tutorial", "small")
+        .withFilter(builder.greaterThan(builder.field("x"), builder.literal(5)))
+        .join(JoinRelType.INNER,
+            builder.equals(builder.field(2, 0, "small_id"), builder.field(2, 1, "id")))
+        .build();
+
+    assertThat(getRowCount(rel), is(500.0));
+  }
+
   /** Tests row count estimation for inner join with unique keys of right input */
   @Test void testInnerJoinRowCountWithUniqueRightKeys() throws Exception {
     Join join = buildJoin(JoinRelType.INNER, "big", "small", b ->

@@ -37,7 +37,7 @@ public class RelMdScanColumnUniqueness
   }
 
   /** Converts indexes of scan output columns to indexes of table columns. */
-  private static ImmutableBitSet toTableColumns(ImmutableBitSet columns,
+  static ImmutableBitSet toTableColumns(ImmutableBitSet columns,
       @Nullable ImmutableIntList projection) {
     if (projection == null) {
       return columns;

@@ -28,6 +28,7 @@ public class TutorialRelMetadataQuery extends RelMetadataQuery {
         List.of(RelMdUsedTables.SOURCE,
                 RelMdJoinRowCount.SOURCE,
                 RelMdScanColumnUniqueness.SOURCE,
+                RelMdScanPopulationSize.SOURCE,
                 DefaultRelMetadataProvider.INSTANCE));
     cluster.setMetadataProvider(provider);
     JaninoRelMetadataProvider handlerProvider = JaninoRelMetadataProvider.of(provider);

@@ -1,5 +1,8 @@
 package com.example.calcite.metadata;
 
+import java.util.List;
+
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinInfo;
 import org.apache.calcite.rel.metadata.BuiltInMetadata;
@@ -57,19 +60,25 @@ public class RelMdJoinRowCount implements MetadataHandler<BuiltInMetadata.RowCou
     // computing result for different join types
     switch (join.getJoinType()) {
     case INNER: {
+      // scaling row count of other operand by fraction of rows left in unique operand
+      // after filtering
       double rowCount;
       if (isLeftUnique && isRightUnique) {
         // estimated row count for an inner join with unique keys in the left and right operands
         // is the minimum estimated row count of the two operands
-        rowCount = Math.min(leftRowCount, rightRowCount);
+        rowCount = Math.min(
+            leftRowCount * getFraction(join.getRight(), info.rightKeys, rightRowCount, mq),
+            rightRowCount * getFraction(join.getLeft(), info.leftKeys, leftRowCount, mq));
       } else if (isRightUnique) {
         // estimated row count for inner join with unique keys in right operand
         // is estimated row count for left operand
-        rowCount = leftRowCount;
+        rowCount =
+            leftRowCount * getFraction(join.getRight(), info.rightKeys, rightRowCount, mq);
       } else if (isLeftUnique) {
         // estimated row count for inner join with unique keys in left operand
         // is estimated row count for right operand
-        rowCount = rightRowCount;
+        rowCount =
+            rightRowCount * getFraction(join.getLeft(), info.leftKeys, leftRowCount, mq);
       } else {
         return getDefaultRowCount(join, mq);
       }
@@ -93,6 +102,20 @@ public class RelMdJoinRowCount implements MetadataHandler<BuiltInMetadata.RowCou
       // we don't use custom row count calculation for other join types
       return getDefaultRowCount(join, mq);
     }
+  }
+
+  /**
+   * Returns fraction of rows left in operand after filtering, computed as ratio of operand
+   * row count and population size of operand keys. Returns 1 if population size is unknown.
+   */
+  private static double getFraction(RelNode input, List<Integer> keys, double rowCount,
+      RelMetadataQuery mq) {
+    Double populationSize = mq.getPopulationSize(input, ImmutableBitSet.of(keys));
+    if (populationSize == null || populationSize <= 0) {
+      return 1;
+    }
+
+    return Math.min(1, rowCount / populationSize);
   }
 
   /** Returns row count of join estimated by default Calcite implementation. */
