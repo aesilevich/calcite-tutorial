@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import com.example.calcite.schema.JsonSchema;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 
 /** Tests for executing queries through Calcite JDBC with custom optimization phases. */
@@ -30,6 +31,23 @@ class CalciteJdbcTest {
       statement.execute("create table users (id int primary key, name varchar(20), dep_id int)");
       statement.execute("insert into users values (1, 'alice', 1), (2, 'bob', 1), "
           + "(11, 'carol', 2), (12, 'dave', 2)");
+    }
+  }
+
+  /** Tests estimated row count of join on unique key of custom schema table */
+  @Test void testJoinRowCountWithUniqueKeys() throws Exception {
+    String query = "explain plan including all attributes for\n"
+        + "select u.\"name\", d.\"name\" from \"tutorial\".\"users\" u\n"
+        + "join \"tutorial\".\"departments\" d on u.\"dep_id\" = d.\"id\"";
+    try (Connection connection = createConnection();
+        Statement statement = connection.createStatement();
+        ResultSet resultSet = statement.executeQuery(query)) {
+      resultSet.next();
+      String joinLine = resultSet.getString(1).lines()
+          .filter(line -> line.contains("Join("))
+          .findFirst()
+          .orElseThrow();
+      assertThat(joinLine, containsString("rowcount = 10000.0,"));
     }
   }
 

@@ -23,6 +23,7 @@ public class JsonSchema {
           {
             "name": "users",
             "rowCount": 10000,
+            "keys": [["id"]],
             "columns": [
               {"name": "id", "type": "integer", "nullable": false},
               {"name": "name", "type": "varchar", "nullable": false},
@@ -32,6 +33,7 @@ public class JsonSchema {
           {
             "name": "departments",
             "rowCount": 1000,
+            "keys": [["id"]],
             "columns": [
               {"name": "id", "type": "integer", "nullable": false},
               {"name": "name", "type": "varchar", "nullable": false}
