@@ -206,6 +206,12 @@ public class JsonSchema {
               + tableDescription);
         }
 
+        // checking that key column is not nullable
+        if (columns.get(index).isNullable) {
+          throw new IllegalArgumentException("Key column '" + columnName + "' of "
+              + tableDescription + " is nullable");
+        }
+
         key.set(index);
       }
       keys.add(key.build());

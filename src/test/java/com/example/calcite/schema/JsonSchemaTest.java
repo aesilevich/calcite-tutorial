@@ -294,9 +294,9 @@ class JsonSchemaTest {
   @Test void testKeys() throws Exception {
     Schema schema = JsonSchema.parse("""
         {"tables": [{"name": "t", "keys": [["a"], ["c", "b"]], "columns": [
-          {"name": "a", "type": "integer"},
-          {"name": "b", "type": "integer"},
-          {"name": "c", "type": "integer"}
+          {"name": "a", "type": "integer", "nullable": false},
+          {"name": "b", "type": "integer", "nullable": false},
+          {"name": "c", "type": "integer", "nullable": false}
         ]}]}
         """);
 
@@ -384,11 +384,24 @@ class JsonSchemaTest {
     IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
         () -> JsonSchema.parse("""
             {"tables": [{"name": "t", "keys": [["c", "c"]], "columns": [
-              {"name": "c", "type": "integer"}
+              {"name": "c", "type": "integer", "nullable": false}
             ]}]}
             """));
 
     assertThat(e.getMessage(), is("Duplicate key column 'c' in table 't'"));
+  }
+
+  /** Tests JSON schema parsing error with nullable key column. */
+  @Test void testKeyColumnNullable() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "keys": [["a", "b"]], "columns": [
+              {"name": "a", "type": "integer", "nullable": false},
+              {"name": "b", "type": "integer", "nullable": true}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Key column 'b' of table 't' is nullable"));
   }
 
   /** Tests tables in default schema. */
