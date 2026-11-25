@@ -19,6 +19,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.example.calcite.logical.RelBuilder;
+import com.example.calcite.distribution.Distribution;
+import com.example.calcite.distribution.DistributionTraitDef;
 import com.example.calcite.physical.PhysicalConvention;
 import com.example.calcite.physical.PhysicalRelBuilder;
 import com.example.calcite.schema.JsonSchema;
@@ -36,6 +38,22 @@ class PhysicalOptimizeProgramTest {
     typeFactory = new JavaTypeFactoryImpl();
     CalciteSchema rootSchema = CalciteSchema.createRootSchema(false, false);
     rootSchema.add("tutorial", JsonSchema.createDefault());
+    rootSchema.add("distributed", JsonSchema.parse("""
+        {"tables": [
+          {"name": "t", "distribution": "random", "columns": [
+            {"name": "a", "type": "integer"},
+            {"name": "b", "type": "integer"},
+            {"name": "c", "type": "integer"},
+            {"name": "d", "type": "integer"}
+          ]},
+          {"name": "r", "distribution": "replicated", "columns": [
+            {"name": "a", "type": "integer"}
+          ]},
+          {"name": "h", "distribution": "hash_sharded", "columns": [
+            {"name": "a", "type": "integer"}
+          ]}
+        ]}
+        """));
     CalciteConnectionConfig config =
         CalciteConnectionConfig.DEFAULT.set(CalciteConnectionProperty.CASE_SENSITIVE, "false");
     catalogReader =
@@ -494,13 +512,271 @@ class PhysicalOptimizeProgramTest {
   private RelOptCluster createCluster() {
     VolcanoPlanner planner = new VolcanoPlanner();
     planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+    planner.addRelTraitDef(DistributionTraitDef.INSTANCE);
     planner.setExecutor(new RexExecutor());
     return RelOptCluster.create(planner, new RexBuilder(typeFactory));
   }
 
   /** Runs physical optimization program for tree with physical convention as required trait */
   private static RelNode optimize(RelNode rel) {
-    return PhysicalOptimizeProgram.INSTANCE.run(rel.getCluster().getPlanner(), rel,
-        rel.getTraitSet().replace(PhysicalConvention.INSTANCE), List.of(), List.of());
+    return optimize(rel, true);
+  }
+
+  /**
+   * Runs physical optimization program in top-down or bottom-up mode for tree with physical
+   * convention as required trait
+   */
+  private static RelNode optimize(RelNode rel, boolean topDown) {
+    PhysicalOptimizeProgram program =
+        topDown ? PhysicalOptimizeProgram.TOP_DOWN : PhysicalOptimizeProgram.BOTTOM_UP;
+    return program.run(rel.getCluster().getPlanner(), rel,
+        rel.getTraitSet().replace(PhysicalConvention.INSTANCE).replace(Distribution.SINGLETON),
+        List.of(), List.of());
+  }
+
+  /** Tests that exchange is added over scan of table with RANDOM distribution */
+  @Test void testScanWithRandomDistribution() {
+    RelNode rel = createRelBuilder()
+        .scan("distributed", "t")
+        .build();
+
+    RelNode expected = createPhysicalRelBuilder()
+        .physicalScan("distributed", "t")
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, true);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests that exchange is added over scan with filter of table with RANDOM distribution */
+  @Test void testScanWithFilterWithRandomDistribution() {
+    RelBuilder builder = createRelBuilder();
+    RelNode rel = builder
+        .scan("distributed", "t")
+        .filter(builder.greaterThan(builder.field("c"), builder.literal(10)))
+        .build();
+
+    PhysicalRelBuilder physicalBuilder = createPhysicalRelBuilder();
+    RelNode expected = physicalBuilder
+        .physicalScan("distributed", "t")
+            .withFilter(physicalBuilder.greaterThan(physicalBuilder.field("c"),
+                physicalBuilder.literal(10)))
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, true);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /**
+   * Tests that project with complex expression of table with RANDOM distribution is pushed
+   * into scan as projection, and project with expression is left under exchange
+   */
+  @Test void testScanWithComplexProjectWithRandomDistribution() {
+    RelBuilder builder = createRelBuilder();
+    RelNode rel = builder
+        .scan("distributed", "t")
+        .project(builder.call(SqlStdOperatorTable.PLUS, builder.field("a"), builder.field("b")))
+        .build();
+
+    PhysicalRelBuilder physicalBuilder = createPhysicalRelBuilder();
+    RelNode expected = physicalBuilder
+        .physicalScan("distributed", "t")
+            .withProjection(physicalBuilder.field("a"), physicalBuilder.field("b"))
+        .physicalProject(physicalBuilder.call(SqlStdOperatorTable.PLUS,
+            physicalBuilder.field("a"), physicalBuilder.field("b")))
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, true);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests multiple complex projects over scan of table with RANDOM distribution */
+  @Test void testScanWithMultipleComplexProjectsWithRandomDistribution() {
+    RelBuilder builder = createRelBuilder();
+    RelNode rel = builder
+        .scan("distributed", "t")
+        .project(builder.call(SqlStdOperatorTable.PLUS, builder.field("a"), builder.field("b")),
+            builder.field("c"))
+        .project(builder.call(SqlStdOperatorTable.MULTIPLY, builder.field(0), builder.field(1)))
+        .build();
+
+    PhysicalRelBuilder physicalBuilder = createPhysicalRelBuilder();
+    RelNode expected = physicalBuilder
+        .physicalScan("distributed", "t")
+            .withProjection(physicalBuilder.field("a"), physicalBuilder.field("b"),
+                physicalBuilder.field("c"))
+        .physicalProject(physicalBuilder.call(SqlStdOperatorTable.MULTIPLY,
+            physicalBuilder.call(SqlStdOperatorTable.PLUS, physicalBuilder.field("a"),
+                physicalBuilder.field("b")),
+            physicalBuilder.field("c")))
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, true);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /**
+   * Tests that exchange is added over scan of table with RANDOM distribution with bottom-up
+   * mode
+   */
+  @Test void testScanWithRandomDistributionWithBottomUpMode() {
+    RelNode rel = createRelBuilder()
+        .scan("distributed", "t")
+        .build();
+
+    RelNode expected = createPhysicalRelBuilder()
+        .physicalScan("distributed", "t")
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, false);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /**
+   * Tests that exchange is added over scan with filter of table with RANDOM distribution
+   * with bottom-up mode
+   */
+  @Test void testScanWithFilterWithRandomDistributionWithBottomUpMode() {
+    RelBuilder builder = createRelBuilder();
+    RelNode rel = builder
+        .scan("distributed", "t")
+        .filter(builder.greaterThan(builder.field("c"), builder.literal(10)))
+        .build();
+
+    PhysicalRelBuilder physicalBuilder = createPhysicalRelBuilder();
+    RelNode expected = physicalBuilder
+        .physicalScan("distributed", "t")
+            .withFilter(physicalBuilder.greaterThan(physicalBuilder.field("c"),
+                physicalBuilder.literal(10)))
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, false);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /**
+   * Tests that project with complex expression of table with RANDOM distribution is pushed
+   * into scan as projection, and project with expression is left over exchange with bottom-up
+   * mode
+   */
+  @Test void testScanWithComplexProjectWithRandomDistributionWithBottomUpMode() {
+    RelBuilder builder = createRelBuilder();
+    RelNode rel = builder
+        .scan("distributed", "t")
+        .project(builder.call(SqlStdOperatorTable.PLUS, builder.field("a"), builder.field("b")))
+        .build();
+
+    PhysicalRelBuilder physicalBuilder = createPhysicalRelBuilder();
+    RelNode expected = physicalBuilder
+        .physicalScan("distributed", "t")
+            .withProjection(physicalBuilder.field("a"), physicalBuilder.field("b"))
+        .physicalExchange(Distribution.SINGLETON)
+        .physicalProject(physicalBuilder.call(SqlStdOperatorTable.PLUS,
+            physicalBuilder.field("a"), physicalBuilder.field("b")))
+        .build();
+
+    RelNode optimized = optimize(rel, false);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /**
+   * Tests multiple complex projects over scan of table with RANDOM distribution with bottom-up
+   * mode
+   */
+  @Test void testScanWithMultipleComplexProjectsWithRandomDistributionWithBottomUpMode() {
+    RelBuilder builder = createRelBuilder();
+    RelNode rel = builder
+        .scan("distributed", "t")
+        .project(builder.call(SqlStdOperatorTable.PLUS, builder.field("a"), builder.field("b")),
+            builder.field("c"))
+        .project(builder.call(SqlStdOperatorTable.MULTIPLY, builder.field(0), builder.field(1)))
+        .build();
+
+    PhysicalRelBuilder physicalBuilder = createPhysicalRelBuilder();
+    RelNode expected = physicalBuilder
+        .physicalScan("distributed", "t")
+            .withProjection(physicalBuilder.field("a"), physicalBuilder.field("b"),
+                physicalBuilder.field("c"))
+        .physicalExchange(Distribution.SINGLETON)
+        .physicalProject(physicalBuilder.call(SqlStdOperatorTable.MULTIPLY,
+            physicalBuilder.call(SqlStdOperatorTable.PLUS, physicalBuilder.field("a"),
+                physicalBuilder.field("b")),
+            physicalBuilder.field("c")))
+        .build();
+
+    RelNode optimized = optimize(rel, false);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests that exchange is added over scan of table with REPLICATED distribution */
+  @Test void testScanWithReplicatedDistribution() {
+    RelNode rel = createRelBuilder()
+        .scan("distributed", "r")
+        .build();
+
+    RelNode expected = createPhysicalRelBuilder()
+        .physicalScan("distributed", "r")
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, true);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /**
+   * Tests that exchange is added over scan of table with REPLICATED distribution with
+   * bottom-up mode
+   */
+  @Test void testScanWithReplicatedDistributionWithBottomUpMode() {
+    RelNode rel = createRelBuilder()
+        .scan("distributed", "r")
+        .build();
+
+    RelNode expected = createPhysicalRelBuilder()
+        .physicalScan("distributed", "r")
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, false);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /** Tests that exchange is added over scan of table with HASH_SHARDED distribution */
+  @Test void testScanWithHashShardedDistribution() {
+    RelNode rel = createRelBuilder()
+        .scan("distributed", "h")
+        .build();
+
+    RelNode expected = createPhysicalRelBuilder()
+        .physicalScan("distributed", "h")
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, true);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
+  }
+
+  /**
+   * Tests that exchange is added over scan of table with HASH_SHARDED distribution with
+   * bottom-up mode
+   */
+  @Test void testScanWithHashShardedDistributionWithBottomUpMode() {
+    RelNode rel = createRelBuilder()
+        .scan("distributed", "h")
+        .build();
+
+    RelNode expected = createPhysicalRelBuilder()
+        .physicalScan("distributed", "h")
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    RelNode optimized = optimize(rel, false);
+    assertThat(RelOptUtil.toString(optimized), is(RelOptUtil.toString(expected)));
   }
 }

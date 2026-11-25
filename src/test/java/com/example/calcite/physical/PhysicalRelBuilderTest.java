@@ -6,6 +6,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.example.calcite.CalciteTutorialDatabase;
+import com.example.calcite.distribution.Distribution;
+import com.example.calcite.schema.JsonSchema;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
@@ -52,6 +54,42 @@ class PhysicalRelBuilderTest {
     assertThat(RelOptUtil.toString(rel),
         is("PhysicalFilter(condition=[>($0, 10)])\n"
             + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests building physical exchange with builder */
+  @Test void testBuildPhysicalExchange() {
+    RelNode rel = database.createPhysicalRelBuilder()
+        .physicalScan("tutorial", "users")
+        .physicalExchange(Distribution.RANDOM)
+        .build();
+
+    assertThat(RelOptUtil.toString(rel),
+        is("PhysicalUnicastExchange(distribution=[RANDOM])\n"
+            + "  PhysicalTableScan(table=[[tutorial, users]])\n"));
+  }
+
+  /** Tests printing distribution of physical nodes for table with RANDOM distribution */
+  @Test void testPrintPhysicalNodesWithRandomDistribution() throws Exception {
+    CalciteTutorialDatabase db = new CalciteTutorialDatabase(JsonSchema.parse("""
+        {"tables": [{"name": "t", "distribution": "random", "columns": [
+          {"name": "a", "type": "integer"},
+          {"name": "b", "type": "integer"}
+        ]}]}
+        """));
+
+    PhysicalRelBuilder builder = db.createPhysicalRelBuilder();
+    RelNode rel = builder
+        .physicalScan("tutorial", "t")
+        .physicalFilter(builder.greaterThan(builder.field("a"), builder.literal(10)))
+        .physicalProject(builder.field("b"))
+        .physicalExchange(Distribution.SINGLETON)
+        .build();
+
+    assertThat(RelOptUtil.toString(rel),
+        is("PhysicalUnicastExchange(distribution=[SINGLETON])\n"
+            + "  PhysicalProject(b=[$1], distribution=[RANDOM])\n"
+            + "    PhysicalFilter(condition=[>($0, 10)], distribution=[RANDOM])\n"
+            + "      PhysicalTableScan(table=[[tutorial, t]], distribution=[RANDOM])\n"));
   }
 
   /** Tests building logical project with physical table scan with builder */

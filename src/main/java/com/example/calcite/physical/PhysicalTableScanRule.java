@@ -4,8 +4,11 @@ import org.apache.calcite.plan.Convention;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.convert.ConverterRule;
 
+import com.example.calcite.distribution.Distribution;
 import com.example.calcite.logical.LogicalTableScanWithFilterAndProject;
 import com.example.calcite.schema.SchemaTable;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Rule that converts logical table scan with filter and project to physical table scan
@@ -27,8 +30,10 @@ public class PhysicalTableScanRule extends ConverterRule {
 
   @Override public RelNode convert(RelNode rel) {
     LogicalTableScanWithFilterAndProject scan = (LogicalTableScanWithFilterAndProject) rel;
+    Distribution distribution =
+        requireNonNull(scan.getTable().unwrap(SchemaTable.class), "table").getDistribution();
     return new PhysicalTableScan(scan.getCluster(),
-        scan.getTraitSet().replace(PhysicalConvention.INSTANCE), scan.getHints(),
-        scan.getTable(), scan.getFilter(), scan.getProjection());
+        scan.getTraitSet().replace(PhysicalConvention.INSTANCE).replace(distribution),
+        scan.getHints(), scan.getTable(), scan.getFilter(), scan.getProjection());
   }
 }

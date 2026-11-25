@@ -20,6 +20,10 @@ import org.apache.calcite.tools.RelBuilderFactory;
 import org.apache.calcite.util.ImmutableIntList;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import com.example.calcite.distribution.Distribution;
+import com.example.calcite.distribution.DistributionTraitDef;
+import com.example.calcite.schema.SchemaTable;
+
 import static java.util.Objects.requireNonNull;
 
 /** Relational builder that can also create physical nodes. */
@@ -46,7 +50,10 @@ public class PhysicalRelBuilder extends RelBuilder {
     RelOptSchema schema = requireNonNull(relOptSchema, "relOptSchema");
     RelOptTable table = requireNonNull(schema.getTableForMember(List.of(tableNames)),
         () -> "Table " + String.join(".", tableNames) + " not found");
-    push(new PhysicalTableScan(getCluster(), physicalTraits(), List.of(), table, null, null));
+    Distribution distribution =
+        requireNonNull(table.unwrap(SchemaTable.class), "table").getDistribution();
+    push(new PhysicalTableScan(getCluster(), physicalTraits().replace(distribution), List.of(),
+        table, null, null));
     return this;
   }
 
@@ -93,7 +100,7 @@ public class PhysicalRelBuilder extends RelBuilder {
   /** Creates physical filter with specified condition on top of stack. */
   public PhysicalRelBuilder physicalFilter(RexNode condition) {
     RelNode input = build();
-    push(new PhysicalFilter(getCluster(), physicalTraits(), List.of(), input, condition));
+    push(new PhysicalFilter(getCluster(), physicalTraits(input), List.of(), input, condition));
     return this;
   }
 
@@ -111,13 +118,27 @@ public class PhysicalRelBuilder extends RelBuilder {
 
     RelDataType rowType = RexUtil.createStructType(getCluster().getTypeFactory(),
         List.of(nodes), fieldNames, SqlValidatorUtil.F_SUGGESTER);
-    push(new PhysicalProject(getCluster(), physicalTraits(), List.of(), input, List.of(nodes),
-        rowType));
+    push(new PhysicalProject(getCluster(), physicalTraits(input), List.of(), input,
+        List.of(nodes), rowType));
+    return this;
+  }
+
+  /** Creates physical unicast exchange to specified distribution on top of stack. */
+  public PhysicalRelBuilder physicalExchange(Distribution distribution) {
+    RelNode input = build();
+    push(new PhysicalUnicastExchange(getCluster(), input.getTraitSet().replace(distribution),
+        input));
     return this;
   }
 
   /** Returns trait set of physical nodes. */
   private RelTraitSet physicalTraits() {
     return getCluster().traitSetOf(PhysicalConvention.INSTANCE);
+  }
+
+  /** Returns trait set of physical nodes with distribution of specified input. */
+  private RelTraitSet physicalTraits(RelNode input) {
+    return physicalTraits().replace(requireNonNull(
+        input.getTraitSet().getTrait(DistributionTraitDef.INSTANCE), "distribution"));
   }
 }

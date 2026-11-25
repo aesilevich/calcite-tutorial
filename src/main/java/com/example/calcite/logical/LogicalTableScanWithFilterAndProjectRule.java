@@ -3,12 +3,14 @@ package com.example.calcite.logical;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.logical.LogicalTableScan;
+import org.apache.calcite.rel.rules.TransformationRule;
 import org.immutables.value.Value;
 
 /** Rule that replaces logical table scan with logical scan with filter and project. */
 @Value.Enclosing
 public class LogicalTableScanWithFilterAndProjectRule
-    extends RelRule<LogicalTableScanWithFilterAndProjectRule.Config> {
+    extends RelRule<LogicalTableScanWithFilterAndProjectRule.Config>
+    implements TransformationRule {
   public static final LogicalTableScanWithFilterAndProjectRule INSTANCE =
       Config.DEFAULT.toRule();
 

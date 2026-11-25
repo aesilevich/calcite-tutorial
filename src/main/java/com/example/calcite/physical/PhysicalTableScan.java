@@ -86,8 +86,8 @@ public class PhysicalTableScan extends TableScan implements PhysicalNode {
   }
 
   @Override public RelWriter explainTerms(RelWriter pw) {
-    return super.explainTerms(pw)
+    return explainDistribution(super.explainTerms(pw)
         .itemIf("filter", filter, filter != null)
-        .itemIf("projection", projection, projection != null);
+        .itemIf("projection", projection, projection != null));
   }
 }

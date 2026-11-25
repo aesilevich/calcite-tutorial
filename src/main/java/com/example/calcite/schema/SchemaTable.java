@@ -1,5 +1,7 @@
 package com.example.calcite.schema;
 
+import com.example.calcite.distribution.Distribution;
+
 import java.util.List;
 
 import org.apache.calcite.rel.type.RelDataType;
@@ -22,12 +24,21 @@ public class SchemaTable extends AbstractTable {
   /** Unique keys, each key is set of column indexes */
   private final List<ImmutableBitSet> keys;
 
-  /** Creates table schema from list of columns, number of rows and unique keys */
+  /** Distribution of table data */
+  private final Distribution distribution;
+
+  /** Creates table schema from list of columns, number of rows, unique keys and distribution */
   public SchemaTable(List<Column> columns, @Nullable Double rowCount,
-      List<ImmutableBitSet> keys) {
+      List<ImmutableBitSet> keys, Distribution distribution) {
     this.columns = columns;
     this.rowCount = rowCount;
     this.keys = keys;
+    this.distribution = distribution;
+  }
+
+  /** Returns distribution of table data */
+  public Distribution getDistribution() {
+    return distribution;
   }
 
   /** Returns table statistics */

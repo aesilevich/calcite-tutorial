@@ -9,6 +9,8 @@ import org.apache.calcite.schema.lookup.LikePattern;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.junit.jupiter.api.Test;
 
+import com.example.calcite.distribution.Distribution;
+
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.is;
@@ -402,6 +404,60 @@ class JsonSchemaTest {
             """));
 
     assertThat(e.getMessage(), is("Key column 'b' of table 't' is nullable"));
+  }
+
+  /** Tests parsing distribution for table in JSON schema. */
+  @Test void testDistribution() throws Exception {
+    Schema schema = JsonSchema.parse("""
+        {"tables": [
+          {"name": "r", "distribution": "replicated",
+           "columns": [{"name": "c", "type": "integer"}]},
+          {"name": "a", "distribution": "random",
+           "columns": [{"name": "c", "type": "integer"}]},
+          {"name": "h", "distribution": "hash_sharded",
+           "columns": [{"name": "c", "type": "integer"}]},
+          {"name": "s", "distribution": "SINGLETON",
+           "columns": [{"name": "c", "type": "integer"}]}
+        ]}
+        """);
+
+    assertThat(schema.getSchemaTable("r").getDistribution(), is(Distribution.REPLICATED));
+    assertThat(schema.getSchemaTable("a").getDistribution(), is(Distribution.RANDOM));
+    assertThat(schema.getSchemaTable("h").getDistribution(), is(Distribution.HASH_SHARDED));
+    assertThat(schema.getSchemaTable("s").getDistribution(), is(Distribution.SINGLETON));
+  }
+
+  /** Tests that distribution of table is SINGLETON if it's not specified in JSON schema. */
+  @Test void testDistributionDefault() throws Exception {
+    Schema schema = JsonSchema.parse("""
+        {"tables": [{"name": "t", "columns": [{"name": "c", "type": "integer"}]}]}
+        """);
+
+    assertThat(schema.getSchemaTable("t").getDistribution(), is(Distribution.SINGLETON));
+  }
+
+  /** Tests JSON schema parsing error with distribution that is not a string. */
+  @Test void testDistributionNotString() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "distribution": 1, "columns": [
+              {"name": "c", "type": "integer"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Field 'distribution' in table 't' is not a string"));
+  }
+
+  /** Tests JSON schema parsing error with unknown distribution. */
+  @Test void testDistributionUnknown() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "distribution": "unknown", "columns": [
+              {"name": "c", "type": "integer"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Unknown distribution 'unknown' for table 't'"));
   }
 
   /** Tests tables in default schema. */
