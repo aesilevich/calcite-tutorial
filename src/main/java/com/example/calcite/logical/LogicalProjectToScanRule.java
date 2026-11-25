@@ -7,6 +7,7 @@ import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.plan.RelOptUtil.InputFinder;
 import org.apache.calcite.rel.logical.LogicalProject;
+import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPermuteInputsShuttle;
@@ -17,7 +18,8 @@ import org.immutables.value.Value;
 
 /** Rule that pushes logical project into logical scan with filter and project. */
 @Value.Enclosing
-public class LogicalProjectToScanRule extends RelRule<LogicalProjectToScanRule.Config> {
+public class LogicalProjectToScanRule extends RelRule<LogicalProjectToScanRule.Config>
+    implements TransformationRule {
   public static final LogicalProjectToScanRule INSTANCE = Config.DEFAULT.toRule();
 
   protected LogicalProjectToScanRule(Config config) {

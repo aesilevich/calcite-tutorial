@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import com.example.calcite.schema.JsonSchema;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 
@@ -99,6 +100,25 @@ class CalciteJdbcTest {
         }
         assertThat(rows, is(List.of(List.of(2, 2L))));
       }
+    }
+  }
+
+  /** Tests executing query with project on top of join of HSQLDB tables */
+  @Test void testSelectWithJoin() throws Exception {
+    String query = "select u.name, m.name from db.users u\n"
+        + "join db.users m on u.dep_id = m.id";
+    try (Connection connection = createConnection();
+        Statement statement = connection.createStatement();
+        ResultSet resultSet = statement.executeQuery(query)) {
+      List<List<String>> rows = new ArrayList<>();
+      while (resultSet.next()) {
+        rows.add(List.of(resultSet.getString(1), resultSet.getString(2)));
+      }
+      assertThat(rows, containsInAnyOrder(
+          List.of("alice", "alice"),
+          List.of("bob", "alice"),
+          List.of("carol", "bob"),
+          List.of("dave", "bob")));
     }
   }
 

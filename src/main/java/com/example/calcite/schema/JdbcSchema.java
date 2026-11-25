@@ -18,6 +18,8 @@ import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 
+import com.example.calcite.distribution.Distribution;
+
 /** Helper class for reading schemas catalog from JDBC database. */
 public class JdbcSchema {
   private JdbcSchema() {}
@@ -125,7 +127,7 @@ public class JdbcSchema {
     }
 
     return new SchemaTable(columns, getRowCount(connection, schemaName, tableName),
-        readKeys(metaData, schemaName, tableName, columns));
+        readKeys(metaData, schemaName, tableName, columns), Distribution.SINGLETON);
   }
 
   /**

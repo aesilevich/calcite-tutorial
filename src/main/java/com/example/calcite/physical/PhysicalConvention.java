@@ -7,7 +7,8 @@ import org.apache.calcite.plan.RelTrait;
 import org.apache.calcite.plan.RelTraitDef;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
-import org.checkerframework.checker.nullness.qual.Nullable;
+
+import com.example.calcite.distribution.DistributionTraitDef;
 
 /** Convention for physical nodes. */
 public enum PhysicalConvention implements Convention {
@@ -35,7 +36,15 @@ public enum PhysicalConvention implements Convention {
 
   @Override public void register(RelOptPlanner planner) {}
 
-  @Override public @Nullable RelNode enforce(RelNode input, RelTraitSet required) {
-    return null;
+  /** Returns true to make Volcano create abstract converters between physical subsets. */
+  @Override public boolean useAbstractConvertersForConversion(RelTraitSet fromTraits,
+      RelTraitSet toTraits) {
+    return true;
+  }
+
+  /** Creates exchange that converts input to required distribution. */
+  @Override public RelNode enforce(RelNode input, RelTraitSet required) {
+    return new PhysicalUnicastExchange(input.getCluster(),
+        input.getTraitSet().replace(required.getTrait(DistributionTraitDef.INSTANCE)), input);
   }
 }

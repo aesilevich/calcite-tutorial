@@ -18,6 +18,7 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.example.calcite.distribution.DistributionTraitDef;
 import com.example.calcite.physical.PhysicalRelBuilder;
 import com.example.calcite.schema.JsonSchema;
 import com.example.calcite.sql.RexExecutor;
@@ -160,6 +161,7 @@ class ConvertToCalcProgramTest {
   private RelOptCluster createCluster() {
     VolcanoPlanner planner = new VolcanoPlanner();
     planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+    planner.addRelTraitDef(DistributionTraitDef.INSTANCE);
     planner.setExecutor(new RexExecutor());
     return RelOptCluster.create(planner, new RexBuilder(typeFactory));
   }

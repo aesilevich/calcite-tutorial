@@ -10,6 +10,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
+import com.example.calcite.distribution.Distribution;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -147,7 +148,8 @@ public class JsonSchema {
       }
 
       List<ImmutableBitSet> keys = parseKeys(tableNode, tableName, columns);
-      tables.put(tableName, new SchemaTable(columns, rowCount, keys));
+      Distribution distribution = parseDistribution(tableNode, tableName);
+      tables.put(tableName, new SchemaTable(columns, rowCount, keys, distribution));
     }
 
     return new Schema(tables);
@@ -218,6 +220,31 @@ public class JsonSchema {
     }
 
     return keys;
+  }
+
+  /**
+   * Parses optional distribution for table. Returns SINGLETON distribution if distribution
+   * is not specified.
+   */
+  private static Distribution parseDistribution(JsonNode tableNode, String tableName) {
+    if (tableNode.get("distribution") == null) {
+      return Distribution.SINGLETON;
+    }
+
+    String name = getFieldText(tableNode, "distribution", "table '" + tableName + "'");
+    switch (name.toUpperCase(Locale.ROOT)) {
+    case "REPLICATED":
+      return Distribution.REPLICATED;
+    case "RANDOM":
+      return Distribution.RANDOM;
+    case "HASH_SHARDED":
+      return Distribution.HASH_SHARDED;
+    case "SINGLETON":
+      return Distribution.SINGLETON;
+    default:
+      throw new IllegalArgumentException("Unknown distribution '" + name + "' for table '"
+          + tableName + "'");
+    }
   }
 
   /**

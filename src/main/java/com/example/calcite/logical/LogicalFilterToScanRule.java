@@ -5,6 +5,7 @@ import java.util.List;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelRule;
 import org.apache.calcite.rel.logical.LogicalFilter;
+import org.apache.calcite.rel.rules.TransformationRule;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexPermuteInputsShuttle;
 import org.apache.calcite.rex.RexUtil;
@@ -13,7 +14,8 @@ import org.immutables.value.Value;
 
 /** Rule that pushes logical filter condition into logical scan with filter and project. */
 @Value.Enclosing
-public class LogicalFilterToScanRule extends RelRule<LogicalFilterToScanRule.Config> {
+public class LogicalFilterToScanRule extends RelRule<LogicalFilterToScanRule.Config>
+    implements TransformationRule {
   public static final LogicalFilterToScanRule INSTANCE = Config.DEFAULT.toRule();
 
   protected LogicalFilterToScanRule(Config config) {

@@ -8,6 +8,8 @@ import org.apache.calcite.plan.RelOptMaterialization;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelTraitSet;
+import org.apache.calcite.plan.volcano.AbstractConverter;
+import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.rules.CoreRules;
 import org.apache.calcite.tools.Program;
@@ -25,13 +27,30 @@ import com.example.calcite.physical.PhysicalToEnumerableConverterRule;
  * planner and optimizes it.
  */
 public class PhysicalOptimizeProgram implements Program {
-  public static final PhysicalOptimizeProgram INSTANCE = new PhysicalOptimizeProgram();
+  /** Program that runs Volcano planner in top-down mode. */
+  public static final PhysicalOptimizeProgram TOP_DOWN = new PhysicalOptimizeProgram(true);
+
+  /** Program that runs Volcano planner in bottom-up mode. */
+  public static final PhysicalOptimizeProgram BOTTOM_UP = new PhysicalOptimizeProgram(false);
+
+  /** Whether Volcano planner runs in top-down mode. */
+  private final boolean topDown;
+
+  public PhysicalOptimizeProgram(boolean topDown) {
+    this.topDown = topDown;
+  }
 
   @Override public RelNode run(RelOptPlanner planner, RelNode rel,
       RelTraitSet requiredOutputTraits, List<RelOptMaterialization> materializations,
       List<RelOptLattice> lattices) {
 
     planner.clear();
+    ((VolcanoPlanner) planner).setTopDownOpt(topDown);
+
+    if (!topDown) {
+      planner.addRule(AbstractConverter.ExpandConversionRule.INSTANCE);
+    }
+
     planner.addRule(LogicalTableScanWithFilterAndProjectRule.INSTANCE);
     planner.addRule(LogicalFilterToScanRule.INSTANCE);
     planner.addRule(LogicalProjectToScanRule.INSTANCE);

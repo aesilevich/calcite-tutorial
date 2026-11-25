@@ -179,11 +179,14 @@ class EnumerableFileScanTest {
         resultSet.next();
         assertThat(resultSet.getString(1),
             is("EnumerableCalc(expr#0..3=[{inputs}], NAME=[$t0], name=[$t3])\n"
-                + "  EnumerableHashJoin(condition=[=($1, $2)], joinType=[inner])\n"
+                + "  EnumerableMergeJoin(condition=[=($1, $2)], joinType=[inner])\n"
                 + "    JdbcToEnumerableConverter\n"
-                + "      JdbcProject(NAME=[$1], DEP_ID=[$2])\n"
-                + "        JdbcTableScan(table=[[DB, USERS]])\n"
-                + "    EnumerableFileScan(table=[[files, departments]], projection=[[0, 1]])\n"));
+                + "      JdbcSort(sort0=[$1], dir0=[ASC])\n"
+                + "        JdbcProject(NAME=[$1], DEP_ID=[$2])\n"
+                + "          JdbcTableScan(table=[[DB, USERS]])\n"
+                + "    EnumerableSort(sort0=[$0], dir0=[ASC])\n"
+                + "      EnumerableFileScan(table=[[files, departments]], "
+                + "projection=[[0, 1]])\n"));
       }
 
       try (ResultSet resultSet = statement.executeQuery(query)) {

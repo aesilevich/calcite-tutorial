@@ -1,6 +1,8 @@
 package com.example.calcite;
 
 import com.example.calcite.metadata.TutorialRelMetadataQuery;
+import com.example.calcite.distribution.Distribution;
+import com.example.calcite.distribution.DistributionTraitDef;
 import com.example.calcite.parser.impl.SqlParserImpl;
 import com.example.calcite.physical.PhysicalConvention;
 import com.example.calcite.physical.PhysicalRelBuilder;
@@ -140,13 +142,16 @@ public class CalciteTutorialDatabase {
 
   /*
    * Converts logical relational tree to physical relation tree with Volcano planner
-   * and optimizes it.
+   * in top-down or bottom-up mode and optimizes it.
    */
-  public RelRoot optimizeQueryPhysical(RelRoot root) {
+  public RelRoot optimizeQueryPhysical(RelRoot root, boolean topDown) {
     RelNode rel = root.rel;
-    RelTraitSet physicalTraits = rel.getTraitSet().replace(PhysicalConvention.INSTANCE);
-    return root.withRel(PhysicalOptimizeProgram.INSTANCE.run(rel.getCluster().getPlanner(), rel,
-        physicalTraits, List.of(), List.of()));
+    RelTraitSet physicalTraits = rel.getTraitSet().replace(PhysicalConvention.INSTANCE)
+        .replace(Distribution.SINGLETON);
+    PhysicalOptimizeProgram program =
+        topDown ? PhysicalOptimizeProgram.TOP_DOWN : PhysicalOptimizeProgram.BOTTOM_UP;
+    return root.withRel(program.run(rel.getCluster().getPlanner(), rel, physicalTraits,
+        List.of(), List.of()));
   }
 
   /* Converts physical projects and filters to physical calcs with HEP planner. */
@@ -161,13 +166,14 @@ public class CalciteTutorialDatabase {
    * all optimization on logical and physical level.
    */
   public RelRoot processQuery(String query) throws SqlParseException {
-    return convertToCalc(optimizeQueryPhysical(processQueryLogical(query)));
+    return convertToCalc(optimizeQueryPhysical(processQueryLogical(query), true));
   }
 
   /* Creates query planner */
   private VolcanoPlanner createPlanner() {
     VolcanoPlanner planner = new VolcanoPlanner();
     planner.addRelTraitDef(ConventionTraitDef.INSTANCE);
+    planner.addRelTraitDef(DistributionTraitDef.INSTANCE);
     planner.setExecutor(new RexExecutor());
     return planner;
   }

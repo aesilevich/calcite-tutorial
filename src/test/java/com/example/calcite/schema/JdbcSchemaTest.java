@@ -8,6 +8,8 @@ import java.util.List;
 import org.apache.calcite.util.ImmutableBitSet;
 import org.junit.jupiter.api.Test;
 
+import com.example.calcite.distribution.Distribution;
+
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.is;
@@ -44,6 +46,18 @@ class JdbcSchemaTest {
       Schema schema = JdbcSchema.readCatalog(connection).getSchema("PUBLIC");
 
       assertThat(schema.getSchemaTable("n").getStatistic().getKeys(), is(List.of()));
+    }
+  }
+
+  /** Tests that tables in custom JDBC schema have SINGLETON distribution */
+  @Test void testDistribution() throws Exception {
+    try (Connection connection = DriverManager.getConnection(JDBC_URL, "SA", "");
+        Statement statement = connection.createStatement()) {
+      statement.execute("create table \"d\" (\"a\" integer not null)");
+
+      Schema schema = JdbcSchema.readCatalog(connection).getSchema("PUBLIC");
+
+      assertThat(schema.getSchemaTable("d").getDistribution(), is(Distribution.SINGLETON));
     }
   }
 }
