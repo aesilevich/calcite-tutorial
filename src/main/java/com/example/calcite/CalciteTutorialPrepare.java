@@ -13,6 +13,8 @@ import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.tools.Program;
 import org.apache.calcite.tools.Programs;
 
+import com.example.calcite.metadata.TutorialRelMetadataQuery;
+
 /**
  * Query preparation for Calcite JDBC connections that optimizes queries with custom
  * optimization programs instead of standard Calcite program.
@@ -28,8 +30,9 @@ public class CalciteTutorialPrepare extends CalcitePrepareImpl {
     EnumerableRel.Prefer prefer = elementType == Object[].class
         ? EnumerableRel.Prefer.ARRAY
         : EnumerableRel.Prefer.CUSTOM;
-    return new PreparingStmt(this, context, catalogReader, typeFactory, prefer,
-        createCluster(planner, new RexBuilder(typeFactory)));
+    RelOptCluster cluster = createCluster(planner, new RexBuilder(typeFactory));
+    TutorialRelMetadataQuery.register(cluster);
+    return new PreparingStmt(this, context, catalogReader, typeFactory, prefer, cluster);
   }
 
   /** Statement preparation that runs custom optimization program. */

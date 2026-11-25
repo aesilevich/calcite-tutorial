@@ -1,6 +1,5 @@
 package com.example.calcite;
 
-import com.example.calcite.metadata.RelMdUsedTables;
 import com.example.calcite.metadata.TutorialRelMetadataQuery;
 import com.example.calcite.parser.impl.SqlParserImpl;
 import com.example.calcite.physical.PhysicalConvention;
@@ -26,10 +25,6 @@ import org.apache.calcite.plan.volcano.VolcanoPlanner;
 import org.apache.calcite.prepare.CalciteCatalogReader;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.RelRoot;
-import org.apache.calcite.rel.metadata.ChainedRelMetadataProvider;
-import org.apache.calcite.rel.metadata.DefaultRelMetadataProvider;
-import org.apache.calcite.rel.metadata.JaninoRelMetadataProvider;
-import org.apache.calcite.rel.metadata.RelMetadataProvider;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rex.RexBuilder;
 import org.apache.calcite.schema.impl.AbstractSchema;
@@ -180,13 +175,7 @@ public class CalciteTutorialDatabase {
   /* Creates cluster  */
   private RelOptCluster createCluster() {
     RelOptCluster cluster = RelOptCluster.create(createPlanner(), new RexBuilder(typeFactory));
-
-    // adding provider for custom metadata
-    RelMetadataProvider provider = ChainedRelMetadataProvider.of(
-        List.of(RelMdUsedTables.SOURCE, DefaultRelMetadataProvider.INSTANCE));
-    cluster.setMetadataProvider(provider);
-    JaninoRelMetadataProvider handlerProvider = JaninoRelMetadataProvider.of(provider);
-    cluster.setMetadataQuerySupplier(() -> new TutorialRelMetadataQuery(handlerProvider));
+    TutorialRelMetadataQuery.register(cluster);
     return cluster;
   }
 

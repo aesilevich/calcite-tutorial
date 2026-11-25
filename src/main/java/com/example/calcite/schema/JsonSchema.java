@@ -7,6 +7,7 @@ import java.util.Locale;
 import java.util.Map;
 
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -22,6 +23,7 @@ public class JsonSchema {
           {
             "name": "users",
             "rowCount": 10000,
+            "keys": [["id"]],
             "columns": [
               {"name": "id", "type": "integer", "nullable": false},
               {"name": "name", "type": "varchar", "nullable": false},
@@ -31,6 +33,7 @@ public class JsonSchema {
           {
             "name": "departments",
             "rowCount": 1000,
+            "keys": [["id"]],
             "columns": [
               {"name": "id", "type": "integer", "nullable": false},
               {"name": "name", "type": "varchar", "nullable": false}
@@ -143,10 +146,78 @@ public class JsonSchema {
         columns.add(new SchemaTable.Column(columnName, type, isNullable, precision, scale));
       }
 
-      tables.put(tableName, new SchemaTable(columns, rowCount));
+      List<ImmutableBitSet> keys = parseKeys(tableNode, tableName, columns);
+      tables.put(tableName, new SchemaTable(columns, rowCount, keys));
     }
 
     return new Schema(tables);
+  }
+
+  /**
+   * Parses optional list of unique keys for table, each key is list of column names.
+   * Returns empty list if keys are not present in JSON.
+   */
+  private static List<ImmutableBitSet> parseKeys(JsonNode tableNode, String tableName,
+      List<SchemaTable.Column> columns) {
+    // checking if keys child node exists
+    JsonNode keysNode = tableNode.get("keys");
+    if (keysNode == null) {
+      return List.of();
+    }
+
+    // parsing all keys from keys child node
+    String tableDescription = "table '" + tableName + "'";
+    List<ImmutableBitSet> keys = new ArrayList<>();
+    for (JsonNode keyNode : getFieldArray(tableNode, "keys", tableDescription)) {
+      // checking that keys element is an array
+      if (!keyNode.isArray() || keyNode.isEmpty()) {
+        throw new IllegalArgumentException("Key of " + tableDescription
+            + " is not a non-empty array");
+      }
+
+      // reading list of field names for element
+      ImmutableBitSet.Builder key = ImmutableBitSet.builder();
+      for (JsonNode columnNode : keyNode) {
+        // checking that key element is string
+        if (!columnNode.isTextual()) {
+          throw new IllegalArgumentException("Key column of " + tableDescription
+              + " is not a string");
+        }
+
+        // reading column name and finding column index by name
+        String columnName = columnNode.textValue();
+        int index = -1;
+        for (int i = 0; i < columns.size(); i++) {
+          if (columns.get(i).name.equals(columnName)) {
+            index = i;
+            break;
+          }
+        }
+
+        // checking that column with specified name exists
+        if (index < 0) {
+          throw new IllegalArgumentException("Unknown key column '" + columnName + "' in "
+              + tableDescription);
+        }
+
+        // checking for duplicate key column
+        if (key.get(index)) {
+          throw new IllegalArgumentException("Duplicate key column '" + columnName + "' in "
+              + tableDescription);
+        }
+
+        // checking that key column is not nullable
+        if (columns.get(index).isNullable) {
+          throw new IllegalArgumentException("Key column '" + columnName + "' of "
+              + tableDescription + " is nullable");
+        }
+
+        key.set(index);
+      }
+      keys.add(key.build());
+    }
+
+    return keys;
   }
 
   /**

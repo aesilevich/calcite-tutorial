@@ -7,11 +7,16 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.ImmutableBitSet;
 
 /** Helper class for reading schemas catalog from JDBC database. */
 public class JdbcSchema {
@@ -119,7 +124,98 @@ public class JdbcSchema {
       }
     }
 
-    return new SchemaTable(columns, getRowCount(connection, schemaName, tableName));
+    return new SchemaTable(columns, getRowCount(connection, schemaName, tableName),
+        readKeys(metaData, schemaName, tableName, columns));
+  }
+
+  /**
+   * Reads primary key and unique indexes of table and returns them as sets of column indexes.
+   * Skips partial indexes, indexes on expressions and indexes with nullable columns,
+   * because unique index allows several rows with nulls.
+   */
+  private static List<ImmutableBitSet> readKeys(DatabaseMetaData metaData, String schemaName,
+      String tableName, List<SchemaTable.Column> columns) throws SQLException {
+    // creating map of table columns
+    Map<String, Integer> columnIndexes = new HashMap<>();
+    for (int i = 0; i < columns.size(); i++) {
+      columnIndexes.put(columns.get(i).name, i);
+    }
+
+    // final set of unique keys to return
+    Set<ImmutableBitSet> keys = new LinkedHashSet<>();
+
+    // reading columns of primary key
+    ImmutableBitSet.Builder primaryKey = ImmutableBitSet.builder();
+    try (ResultSet keySet = metaData.getPrimaryKeys(null, schemaName, tableName)) {
+      while (keySet.next()) {
+        Integer index = columnIndexes.get(keySet.getString("COLUMN_NAME"));
+        if (index == null) {
+          throw new SQLException("Unknown primary key column '"
+              + keySet.getString("COLUMN_NAME") + "' in table '" + tableName + "'");
+        }
+
+        primaryKey.set(index);
+      }
+    }
+
+    // adding primary key index if set of columns is not empty
+    if (!primaryKey.isEmpty()) {
+      keys.add(primaryKey.build());
+    }
+
+    // map of set of index columns by index name
+    Map<String, ImmutableBitSet.Builder> indexes = new LinkedHashMap<>();
+
+    // list of names of indexes that we don't support and should skip
+    Set<String> skippedIndexes = new HashSet<>();
+
+    // reading columns of unique indexes, it's returned as flat set containing columns
+    // for all indexes in a table
+    try (ResultSet indexSet = metaData.getIndexInfo(null, schemaName, tableName, true, true)) {
+      while (indexSet.next()) {
+        // skipping table statistics row, it has no index name
+        String indexName = indexSet.getString("INDEX_NAME");
+        if (indexName == null) {
+          continue;
+        }
+
+        // skipping non-unique indexes
+        if (indexSet.getBoolean("NON_UNIQUE")) {
+          continue;
+        }
+
+        // skipping partial index, it's unique only for rows matching filter condition
+        if (indexSet.getString("FILTER_CONDITION") != null) {
+          skippedIndexes.add(indexName);
+          continue;
+        }
+
+        // skipping index on expression, it has no column name or name of unknown column
+        Integer index = columnIndexes.get(indexSet.getString("COLUMN_NAME"));
+        if (index == null) {
+          skippedIndexes.add(indexName);
+          continue;
+        }
+
+        // skipping index with nullable column, it allows several rows with nulls
+        if (columns.get(index).isNullable) {
+          skippedIndexes.add(indexName);
+          continue;
+        }
+
+        // adding column to set of columns in index map
+        indexes.computeIfAbsent(indexName, name -> ImmutableBitSet.builder()).set(index);
+      }
+    }
+
+    // adding indexes into final list if they should not be skipped
+    for (Map.Entry<String, ImmutableBitSet.Builder> entry : indexes.entrySet()) {
+      if (!skippedIndexes.contains(entry.getKey())) {
+        keys.add(entry.getValue().build());
+      }
+    }
+
+    return List.copyOf(keys);
   }
 
   /** Escapes '_' and '%' characters in name. */

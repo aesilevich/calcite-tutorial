@@ -1,8 +1,12 @@
 package com.example.calcite.schema;
 
+import java.util.List;
+
 import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.schema.Statistic;
 import org.apache.calcite.schema.lookup.LikePattern;
+import org.apache.calcite.util.ImmutableBitSet;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -284,6 +288,120 @@ class JsonSchemaTest {
             """));
 
     assertThat(e.getMessage(), is("Scale is specified without precision for column 't.c'"));
+  }
+
+  /** Tests parsing single-column and multi-column unique keys of table in JSON schema. */
+  @Test void testKeys() throws Exception {
+    Schema schema = JsonSchema.parse("""
+        {"tables": [{"name": "t", "keys": [["a"], ["c", "b"]], "columns": [
+          {"name": "a", "type": "integer", "nullable": false},
+          {"name": "b", "type": "integer", "nullable": false},
+          {"name": "c", "type": "integer", "nullable": false}
+        ]}]}
+        """);
+
+    Statistic statistic = schema.getSchemaTable("t").getStatistic();
+    assertThat(statistic.getKeys(), is(List.of(ImmutableBitSet.of(0), ImmutableBitSet.of(1, 2))));
+    assertThat(statistic.isKey(ImmutableBitSet.of(0)), is(true));
+    assertThat(statistic.isKey(ImmutableBitSet.of(0, 1)), is(true));
+    assertThat(statistic.isKey(ImmutableBitSet.of(1)), is(false));
+    assertThat(statistic.isKey(ImmutableBitSet.of(1, 2)), is(true));
+  }
+
+  /** Tests that table has no keys if they are not specified in JSON schema. */
+  @Test void testNoKeys() throws Exception {
+    Schema schema = JsonSchema.parse("""
+        {"tables": [{"name": "t", "columns": [
+          {"name": "c", "type": "integer"}
+        ]}]}
+        """);
+
+    assertThat(schema.getSchemaTable("t").getStatistic().getKeys(), is(List.of()));
+  }
+
+  /** Tests JSON schema parsing error with keys that are not an array. */
+  @Test void testKeysNotArray() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "keys": "c", "columns": [
+              {"name": "c", "type": "integer"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Field 'keys' in table 't' is not an array"));
+  }
+
+  /** Tests JSON schema parsing error with key that is not an array. */
+  @Test void testKeyNotArray() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "keys": ["c"], "columns": [
+              {"name": "c", "type": "integer"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Key of table 't' is not a non-empty array"));
+  }
+
+  /** Tests JSON schema parsing error with empty key. */
+  @Test void testKeyEmpty() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "keys": [[]], "columns": [
+              {"name": "c", "type": "integer"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Key of table 't' is not a non-empty array"));
+  }
+
+  /** Tests JSON schema parsing error with key column that is not a string. */
+  @Test void testKeyColumnNotString() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "keys": [[0]], "columns": [
+              {"name": "c", "type": "integer"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Key column of table 't' is not a string"));
+  }
+
+  /** Tests JSON schema parsing error with unknown key column. */
+  @Test void testKeyColumnUnknown() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "keys": [["x"]], "columns": [
+              {"name": "c", "type": "integer"}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Unknown key column 'x' in table 't'"));
+  }
+
+  /** Tests JSON schema parsing error with duplicate key column. */
+  @Test void testKeyColumnDuplicate() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "keys": [["c", "c"]], "columns": [
+              {"name": "c", "type": "integer", "nullable": false}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Duplicate key column 'c' in table 't'"));
+  }
+
+  /** Tests JSON schema parsing error with nullable key column. */
+  @Test void testKeyColumnNullable() {
+    IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+        () -> JsonSchema.parse("""
+            {"tables": [{"name": "t", "keys": [["a", "b"]], "columns": [
+              {"name": "a", "type": "integer", "nullable": false},
+              {"name": "b", "type": "integer", "nullable": true}
+            ]}]}
+            """));
+
+    assertThat(e.getMessage(), is("Key column 'b' of table 't' is nullable"));
   }
 
   /** Tests tables in default schema. */
